@@ -11,3 +11,11 @@ coverage/
 *.log
 .vercel
 next-env.d.ts
+
+# Test artefacts
+/tests/**/__screenshots__/
+*.tsbuildinfo
+
+# Supabase CLI local state
+/supabase/.branches
+/supabase/.temp
