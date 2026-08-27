@@ -23,7 +23,7 @@ import { AppError } from "@/shared/errors";
 import type { Sql } from "@/shared/db";
 import type { AccountsDeps } from "./deps";
 import { consumeRateLimit } from "./rate-limit";
-import { SCANNER_VERSION, explainFindings, scanForContactDetails } from "./contact-scanner";
+import { SCANNER_VERSION, scanFields } from "./contact-scanner";
 import { PUBLIC_ARTIST_COLUMNS, toPublicArtist, type ArtistProfileRow, type PublicArtist } from "./serialize";
 
 export interface ArtistUpgradeInput {
@@ -36,27 +36,6 @@ export interface ArtistUpgradeInput {
 const DisplayName = z.string().trim().min(2).max(60);
 const Biography = z.string().trim().max(2000);
 const City = z.string().trim().min(1).max(80);
-
-/**
- * Run the contact scanner over every free-text field at once.
- *
- * All of them, in one pass, so an artist with a phone number in the bio and a
- * handle in the display name is told about both rather than discovering the
- * second after fixing the first.
- */
-function scanFreeText(fields: Readonly<Record<string, string | null | undefined>>): void {
-  const problems: Record<string, string[]> = {};
-
-  for (const [name, value] of Object.entries(fields)) {
-    if (!value) continue;
-    const findings = scanForContactDetails(value);
-    if (findings.length > 0) problems[name] = [explainFindings(findings)];
-  }
-
-  if (Object.keys(problems).length > 0) {
-    throw AppError.fieldsInvalid(problems, { code: "accounts.contact_details_not_permitted" });
-  }
-}
 
 /**
  * Add the artist role and create the public artist profile.
@@ -92,7 +71,7 @@ export async function upgradeToArtist(
   // Public text, so it is scanned. This is the write path the scanner exists
   // for -- and the reason no policy lets `authenticated` write these tables
   // through the data API, which would skip this line entirely.
-  scanFreeText({ displayName, biography });
+  scanFields({ displayName, biography });
 
   await consumeRateLimit(deps.db, "artist_upgrade", userId);
 

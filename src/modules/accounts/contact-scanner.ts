@@ -36,6 +36,8 @@
  * internal artefact and displaying it would be baffling.
  */
 
+import { AppError } from "@/shared/errors";
+
 /**
  * Bumped whenever the rules below change. Rows carrying an older version are
  * re-scanned by a backfill that FLAGS them for an operator rather than editing
@@ -276,4 +278,43 @@ export function explainFindings(findings: readonly ContactFinding[]): string {
     "PACHKA keeps conversations and payments on the platform, so contact details cannot appear " +
     "in public text. Please remove them and save again."
   );
+}
+
+/**
+ * Scan several named fields at once and throw if any of them carries contact
+ * details.
+ *
+ * Exported because SECURITY.md S2-19 item 1 requires the scanner to be "a
+ * shared, single implementation exposed from `accounts`" that runs on every
+ * write path producing text on a public surface — artwork title, description,
+ * materials, image alt text, review text, artist biography, and the
+ * AI-generated description before it is stored. Every one of those modules
+ * needs the same three lines around `scanForContactDetails`, and a module that
+ * writes its own copy is one refactor away from the copies disagreeing.
+ *
+ * Non-string values are ignored rather than rejected, so a caller can hand this
+ * a whole parsed input object — prices, dimensions, booleans and all — without
+ * having to pick the free-text fields out first. Picking them out by hand is
+ * how a field gets forgotten.
+ *
+ * Reports every offending field in one throw: an artist with a phone number in
+ * the description and a handle in the title should be told both at once.
+ */
+export function scanFields(
+  values: Readonly<Record<string, unknown>>,
+  options: { readonly code?: string } = {},
+): void {
+  const problems: Record<string, string[]> = {};
+
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value !== "string" || value.length === 0) continue;
+    const findings = scanForContactDetails(value);
+    if (findings.length > 0) problems[name] = [explainFindings(findings)];
+  }
+
+  if (Object.keys(problems).length > 0) {
+    throw AppError.fieldsInvalid(problems, {
+      code: options.code ?? "accounts.contact_details_not_permitted",
+    });
+  }
 }

@@ -20,6 +20,7 @@ export {
   containsContactDetails,
   explainFindings,
   normaliseForScanning,
+  scanFields,
   scanForContactDetails,
   type ContactFinding,
   type ContactFindingKind,
