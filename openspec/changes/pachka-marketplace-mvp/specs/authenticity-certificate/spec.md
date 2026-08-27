@@ -42,11 +42,11 @@ Every certificate SHALL carry explicit text stating that its contents reflect th
 - **THEN** the certificate states that the artist declared generative AI assistance
 
 ### Requirement: Certificates are verifiable and immutable
-Each certificate SHALL carry a unique identifier resolvable at a public URL that displays the certificate's recorded details. A generated certificate SHALL NOT be modifiable. Where the underlying sale is reversed by a completed return, the public verification page SHALL show the certificate as void.
+Each certificate SHALL carry a unique identifier resolvable at a public URL. The buyer's name SHALL appear only on the certificate document delivered privately to the buyer, never on the public verification page — publishing a purchase record naming a private individual is not acceptable. Certificate identifiers SHALL be unguessable, and the verification endpoint SHALL be rate limited so the identifier space cannot be enumerated. A generated certificate SHALL NOT be modifiable. Where the underlying sale is reversed by a completed return, the public verification page SHALL show the certificate as void.
 
-#### Scenario: Public verification
+#### Scenario: Public verification does not name the buyer
 - **WHEN** anyone opens the public URL for a valid certificate identifier
-- **THEN** the page displays the recorded artwork, artist, and sale details
+- **THEN** the page displays the artwork, artist, medium, dimensions, edition information, sale date and validity — and SHALL NOT display the buyer's name or any other buyer detail
 
 #### Scenario: Sale reversed by return
 - **WHEN** an order whose certificate was issued completes a return
@@ -55,3 +55,7 @@ Each certificate SHALL carry a unique identifier resolvable at a public URL that
 #### Scenario: Unknown identifier
 - **WHEN** anyone opens the public URL for an identifier that does not exist
 - **THEN** the system returns a not-found response
+
+#### Scenario: Enumeration is refused
+- **WHEN** a client requests many certificate identifiers in rapid succession
+- **THEN** the endpoint rate limits the client

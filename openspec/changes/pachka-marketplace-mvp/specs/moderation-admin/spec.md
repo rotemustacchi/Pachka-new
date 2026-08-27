@@ -19,6 +19,10 @@ The system SHALL provide a report action on every artwork detail page and artist
 - **WHEN** several reports are filed against the same artwork
 - **THEN** the system groups them into a single admin queue item showing the report count
 
+#### Scenario: Report flooding is refused
+- **WHEN** a client files reports beyond the configured rate limit
+- **THEN** further reports are refused, and the report count already recorded is not inflated by the refused attempts
+
 ### Requirement: Operator notification
 The system SHALL notify the operator by email at the configured PACHKA address whenever a new report is filed, and SHALL include the artwork, the reason, and a direct link to the admin queue item.
 
@@ -72,7 +76,7 @@ An admin SHALL be able to suspend an account. A suspended artist's published art
 - **THEN** the ledger entries are retained and flagged for operator decision rather than cancelled
 
 ### Requirement: Admin actions are auditable
-The system SHALL record every admin action — takedown, suspension, report resolution, commission change, rate table change, and payout settlement — with the acting account, timestamp, target, and any note. The audit record SHALL be append-only.
+The system SHALL record every admin action — takedown, suspension, report resolution, commission change, rate table change, and payout settlement — with the acting account, timestamp, target, and any note. The audit record SHALL be append-only, enforced in the database by revoked update and delete grants and a trigger, not by application convention alone. Each entry SHALL be written in the same transaction as the action it records, so an action cannot succeed without its audit row. Entries SHALL be chained by a hash of the preceding entry, so that tampering by anything holding database credentials — including the application itself — is detectable.
 
 #### Scenario: Action recorded
 - **WHEN** an admin performs any of the recorded actions
@@ -80,4 +84,12 @@ The system SHALL record every admin action — takedown, suspension, report reso
 
 #### Scenario: Audit entry cannot be altered
 - **WHEN** any actor attempts to modify or delete an audit entry
-- **THEN** the system rejects the attempt
+- **THEN** the database rejects the attempt
+
+#### Scenario: Action and audit row are atomic
+- **WHEN** writing the audit row fails
+- **THEN** the admin action it records is rolled back and does not take effect
+
+#### Scenario: Tampering is detectable
+- **WHEN** an audit entry is altered directly in the database
+- **THEN** verifying the hash chain reports the break

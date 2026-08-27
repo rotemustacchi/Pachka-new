@@ -85,6 +85,29 @@ No magic numbers in module code.
 **Row-level security is on for every table.** A missing RLS policy is a security
 defect, not a follow-up.
 
+**RLS cannot hide a column.** Supabase publishes a PostgREST data API at
+`/rest/v1/<table>` for every table in `public`, reachable by anyone holding the
+anon key — which legitimately ships in the client bundle. RLS is row-level: a
+policy that lets an anonymous visitor read an artist's row lets them read
+*every column of it*, and no server-side serializer sits on that path. Therefore
+**sensitive columns live in separate tables with grants revoked**, never as
+extra columns on a publicly-readable row. `toPublicArtist()` protects the
+application's own routes; it does not protect the data API, and must not be
+relied on as the only control.
+
+**Roles are never read from `user_metadata`.** A signed-in user can rewrite
+their own `user_metadata` via `supabase.auth.updateUser`, which would make admin
+self-grantable. Authorization reads `user_roles` only.
+
+**The service-role key is server-only.** It may not appear in any module that
+can be bundled for the browser, in any `NEXT_PUBLIC_*` variable, or in any
+client component.
+
+**Reservation uses the direct Postgres connection, not supabase-js.** PostgREST
+runs every request in its own transaction, so a `FOR UPDATE` issued through it
+releases immediately and the lock buys nothing. Use `shared/db`'s
+`withTransaction`.
+
 **Artist contact details never leave the server for a buyer-facing response.**
 `accounts` exposes a single `toPublicArtist()` serializer; nothing else may
 shape artist data for a buyer.
@@ -99,7 +122,7 @@ written by its owner.
 
 | Module | Tables |
 |---|---|
-| accounts | `profiles`, `user_roles`, `artist_profiles`, `artist_payout_details`, `reviews` |
+| accounts | `profiles`, `user_roles`, `artist_profiles`, `artist_contact_details`, `artist_payout_details`, `reviews` |
 | artworks | `artworks`, `artwork_images` |
 | uploads | `upload_events`, `artwork_embeddings` |
 | matchmaker | `match_queries`, `match_impressions`, `notify_requests` |
@@ -112,6 +135,14 @@ written by its owner.
 
 Foreign keys across module boundaries are permitted and expected. Writes are
 not.
+
+**Table split for column-level secrecy.** `artist_profiles` holds only what a
+buyer may see — display name, photo, biography, city. An artist's email, phone,
+street address and social handles live in `artist_contact_details`, and bank
+details in `artist_payout_details`. Both have all grants revoked from `anon` and
+`authenticated` and are reachable only through the privileged server
+connection. This is a schema requirement, not a policy preference: see the RLS
+matrix in `SECURITY.md`.
 
 ## Test policy
 

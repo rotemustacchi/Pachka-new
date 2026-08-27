@@ -26,8 +26,8 @@ The system SHALL rank published artworks against the buyer's answers using preco
 - **WHEN** a buyer submits the questionnaire
 - **THEN** the system produces the ranking without any outbound request to an external AI model
 
-#### Scenario: Ranking is reproducible
-- **WHEN** the same answers are submitted twice against an unchanged catalog
+#### Scenario: Ranking is reproducible within a rotation epoch
+- **WHEN** the same answers are submitted twice against an unchanged catalog within the same rotation epoch
 - **THEN** the system returns the same artworks in the same order
 
 ### Requirement: Budget is a ranking signal, not a hard cut
@@ -67,19 +67,38 @@ Every matchmaker result view SHALL offer the buyer a way to continue: revising t
 - **WHEN** a buyer submits an email address for notification about future matches
 - **THEN** the system stores the answers with the address and confirms the request
 
-### Requirement: Exposure rotation
-Where two or more artworks score within the configured tie tolerance of one another, the system SHALL vary their relative order between queries so that ranking does not permanently favour the same artworks. Artworks with fewer lifetime match impressions SHALL be preferred within a tie band.
+### Requirement: Anonymous submissions are rate limited
+The matchmaker questionnaire and the notify-me capture SHALL be rate limited per client, and the notify-me capture SHALL require a verified email before any message is sent to that address. Exceeding a limit SHALL be refused with a clear message and SHALL NOT reveal whether an address is already stored.
 
-#### Scenario: Near-equal scores rotate
-- **WHEN** three artworks score within the tie tolerance for the same top position across repeated queries by different buyers
-- **THEN** the system does not always present the same one first, favouring those with fewer lifetime impressions
+#### Scenario: Query flood is refused
+- **WHEN** a client submits questionnaires beyond the configured rate limit
+- **THEN** further submissions are refused until the window resets
+
+#### Scenario: Notify-me address is not confirmed by the response
+- **WHEN** an address is submitted twice to the notify-me capture
+- **THEN** the response is identical both times and does not disclose that the address was already stored
+
+### Requirement: Exposure rotation
+Where two or more artworks score within the configured tie tolerance of one another, the system SHALL order them by a deterministic function of the current rotation epoch and the artwork identifier, so that ranking does not permanently favour the same artworks. The rotation epoch SHALL advance on a fixed schedule. The system SHALL NOT use match impression counts, view counts, or any other visitor-influenced value as a ranking input, because an anonymous visitor could otherwise move a rival's position by scripting queries.
+
+#### Scenario: Near-equal scores rotate across epochs
+- **WHEN** three artworks score within the tie tolerance for the same top position and the rotation epoch advances
+- **THEN** their relative order changes, so no single artwork holds the top tie position permanently
+
+#### Scenario: Ordering is stable within an epoch
+- **WHEN** the same tie band is ranked repeatedly within one rotation epoch
+- **THEN** the order is identical every time
 
 #### Scenario: Clear winner is not displaced
 - **WHEN** one artwork scores well outside the tie tolerance above all others
-- **THEN** it is ranked first regardless of its impression count
+- **THEN** it is ranked first regardless of the rotation epoch
 
-### Requirement: Match impressions are recorded
-The system SHALL record, per artwork, the number of times it has been returned in matchmaker results, and SHALL expose that count to the artist in their dashboard and to admins.
+#### Scenario: Impressions cannot influence rank
+- **WHEN** a visitor issues many queries that return a particular artwork
+- **THEN** that artwork's position in any later ranking is unchanged
+
+### Requirement: Match impressions are recorded for reporting only
+The system SHALL record, per artwork, the number of times it has been returned in matchmaker results, and SHALL expose that count to the artist in their dashboard and to admins. This count SHALL be reporting data only and SHALL NOT be read by the ranking function.
 
 #### Scenario: Impression counted
 - **WHEN** an artwork is returned in a matchmaker result set

@@ -65,7 +65,7 @@ The system SHALL allow a buyer to request cancellation within 14 days of deliver
 - **THEN** the return terms, including return shipping responsibility and transit risk, are visible before purchase
 
 ### Requirement: Return cost and transit risk fall on the buyer
-The system SHALL state, and apply, that the buyer bears the cost of return shipping and the risk of damage in return transit. A refund SHALL be issued only after the artist confirms receipt of the returned artwork in its original condition. The platform MAY deduct a cancellation fee up to the statutory maximum.
+The system SHALL state, and apply, that the buyer bears the cost of return shipping and the risk of damage in return transit. A refund SHALL be issued after the artist confirms receipt of the returned artwork in its original condition, or on admin resolution where the artist does not respond within the configured window. The artist SHALL NOT be the sole party able to release a refund, since the platform holds the buyer's money and bears the resulting liability. The platform MAY deduct a cancellation fee up to the statutory maximum.
 
 #### Scenario: Return arrives intact
 - **WHEN** an artist confirms receipt of a returned artwork in original condition
@@ -78,6 +78,10 @@ The system SHALL state, and apply, that the buyer bears the cost of return shipp
 #### Scenario: Return never arrives
 - **WHEN** a return is not confirmed received within the configured window after the request
 - **THEN** the system flags the case for admin review and does not refund automatically
+
+#### Scenario: Artist does not respond to a delivered return
+- **WHEN** tracking shows the returned artwork delivered to the artist and the artist neither confirms receipt nor reports damage within the configured response window
+- **THEN** the system escalates to an admin, who may resolve the refund in the buyer's favour — artist silence SHALL NOT indefinitely withhold a buyer's money
 
 ### Requirement: Return restores inventory only when resolved in the buyer's favour
 The system SHALL restore a returned artwork to purchasable state only when the return completes with the artwork intact. A unique artwork under an unresolved return SHALL remain unavailable.

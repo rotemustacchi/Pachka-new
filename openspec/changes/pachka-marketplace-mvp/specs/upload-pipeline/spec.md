@@ -20,7 +20,7 @@ The system SHALL reject an uploaded image that falls below the published minimum
 - **THEN** the system accepts it and proceeds to safety screening
 
 ### Requirement: Safety screening
-The system SHALL screen every accepted image for adult, violent, and hateful content, and SHALL block any image the screening flags above the configured confidence threshold. A blocked upload SHALL be recorded for admin review. The system SHALL NOT attempt to determine whether an item is mass-produced or factory-made — that is handled reactively by moderation.
+The system SHALL screen every accepted image for adult, violent, and hateful content, and SHALL block any image the screening flags above the configured confidence threshold. A blocked upload SHALL be recorded for admin review. No image SHALL reach a public surface without a successful screening verdict: a screening failure blocks publication, never merely warns. The system SHALL NOT attempt to determine whether an item is mass-produced or factory-made — that is handled reactively by moderation.
 
 #### Scenario: Image flagged as unsafe
 - **WHEN** safety screening flags an uploaded image above the threshold
@@ -28,7 +28,11 @@ The system SHALL screen every accepted image for adult, violent, and hateful con
 
 #### Scenario: Screening service unavailable
 - **WHEN** the safety screening service cannot be reached
-- **THEN** the system allows the upload to proceed, flags the artwork for admin review, and records the screening failure
+- **THEN** the system accepts the upload into the artist's draft, blocks publication until screening succeeds or an admin clears it, flags the artwork for admin review, and records the screening failure
+
+#### Scenario: Screening failure is not a publication bypass
+- **WHEN** an artist repeatedly triggers screening failures and attempts to publish
+- **THEN** every affected artwork remains unpublished and no unscreened image reaches any public surface
 
 ### Requirement: AI tag suggestion with artist override
 The system SHALL analyse each accepted primary image and suggest values for medium, style, mood, and dominant colours. Suggestions SHALL be presented to the artist as pre-filled, editable selections. The artist's final choice SHALL always take precedence, and the system SHALL record whether each stored value was AI-suggested or artist-set.
@@ -61,7 +65,15 @@ The system SHALL compute and store a vector embedding for each published artwork
 - **THEN** the artwork is still published and remains browsable in the catalog, but is excluded from matchmaker results until an embedding exists
 
 ### Requirement: Image storage and delivery
-The system SHALL store an optimised, size-limited derivative of each uploaded image for display and SHALL retain the original. Displayed images SHALL NOT carry a watermark. The system SHALL serve display images no larger than the configured maximum display dimension.
+The system SHALL store an optimised, size-limited derivative of each uploaded image for display and SHALL retain the original. Displayed images SHALL NOT carry a watermark. The system SHALL serve display images no larger than the configured maximum display dimension. Every served derivative SHALL have all EXIF and XMP metadata stripped, GPS coordinates in particular — an artist's studio location to within metres is more precise than the street address this platform already refuses to disclose. Uploads SHALL be written only through the pipeline; direct client writes to the image store SHALL be refused.
+
+#### Scenario: Location metadata is stripped
+- **WHEN** an artist uploads a photograph carrying GPS EXIF coordinates
+- **THEN** the served derivative contains no EXIF or XMP metadata of any kind
+
+#### Scenario: Direct store write is refused
+- **WHEN** a client attempts to write an image to the store without going through the upload pipeline
+- **THEN** the write is refused
 
 #### Scenario: Optimised derivative served
 - **WHEN** a buyer loads an artwork detail page
