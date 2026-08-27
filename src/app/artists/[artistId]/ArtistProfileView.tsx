@@ -55,9 +55,11 @@ function Avatar({ artist }: { readonly artist: PublicArtist }) {
   return (
     <div className="flex size-[180px] shrink-0 items-center justify-center rounded-full border border-rule bg-paper-deep">
       {artist.avatarPath ? (
-        // eslint-disable-next-line @next/next/no-img-element -- the storage path
-        // is resolved to a signed URL by the uploads module; next/image would
-        // need that host allow-listed, which is that module's call to make.
+        // A plain <img>, not next/image: the storage path resolves to a signed
+        // URL from Supabase Storage, and next/image would need that host
+        // allow-listed in next.config -- which is the uploads module's call to
+        // make, not this page's. Revisit once that module settles the host.
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={artist.avatarPath}
           alt=""
