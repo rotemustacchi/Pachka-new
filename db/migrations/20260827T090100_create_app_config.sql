@@ -1,5 +1,7 @@
 -- app_config: every number that an operator may need to change without a
--- deployment. Owner: shared (ARCHITECTURE.md, "Database schema — table ownership").
+-- deployment.
+--
+-- Owner: shared (ARCHITECTURE.md, "Database schema — table ownership")
 --
 -- ARCHITECTURE.md: "Every configurable number lives in app_config, read through
 -- shared/config. No magic numbers in module code." A module that hard-codes a

@@ -49,7 +49,8 @@ boundary. Statements that cannot run inside a transaction (e.g. `create index
 concurrently`) therefore need their own migration containing nothing else, with
 a comment saying so.
 
-**Every migration names its owner** in a header comment. A table is owned by
+**Every migration names its owner** on a line of its own — `-- Owner: orders`
+— and that is checked by a test, not by review. A table is owned by
 exactly one module (ARCHITECTURE.md, "Database schema — table ownership"), and
 only that module's team writes migrations touching it. Foreign keys pointing
 into another module's tables are expected; writes to them are not.
