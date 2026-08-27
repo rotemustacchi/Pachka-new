@@ -11,15 +11,15 @@
 
 ## 2. Accounts and Profiles
 
-- [ ] 2.1 Create the `accounts`, `roles`, and `artist_profiles` tables with row-level security policies
-- [ ] 2.2 Implement registration, sign-in, sign-out, and password reset via Supabase Auth
-- [ ] 2.3 Implement email verification, and gate publishing and ordering on a verified address
-- [ ] 2.4 Build the buyer-to-artist upgrade flow that collects display name, bio, photo, and city
-- [ ] 2.5 Implement the contact-detail scanner that rejects emails, phone numbers, and social handles in artist free-text fields
-- [ ] 2.6 Build the public artist profile page, returning not-found when the artist has no published artworks
-- [ ] 2.7 Add a serialisation layer that strips artist contact details from every buyer-facing API response, with a test asserting this
-- [ ] 2.8 Create the `reviews` table and implement one-review-per-completed-order with edit support
-- [ ] 2.9 Render reviews and the aggregate rating on the artist profile
+- [x] 2.1 Create the `accounts`, `roles`, and `artist_profiles` tables with row-level security policies
+- [x] 2.2 Implement registration, sign-in, sign-out, and password reset via Supabase Auth
+- [x] 2.3 Implement email verification, and gate publishing and ordering on a verified address
+- [x] 2.4 Build the buyer-to-artist upgrade flow that collects display name, bio, photo, and city
+- [x] 2.5 Implement the contact-detail scanner that rejects emails, phone numbers, and social handles in artist free-text fields
+- [x] 2.6 Build the public artist profile page, returning not-found when the artist has no published artworks
+- [x] 2.7 Add a serialisation layer that strips artist contact details from every buyer-facing API response, with a test asserting this
+- [x] 2.8 Create the `reviews` table and implement one-review-per-completed-order with edit support
+- [x] 2.9 Render reviews and the aggregate rating on the artist profile
 
 ## 3. Artwork Listings
 
