@@ -1,0 +1,141 @@
+# PACHKA — CI
+#
+# Runs on every push and pull request: typecheck, lint, and the full test
+# suite (unit + ui + integration) against a REAL PostgreSQL service
+# container — see TESTING.md. This is not a smoke test; the integration
+# project's own global setup (tests/harness/global-setup.ts) throws if zero
+# migrations were applied, and Vitest itself exits non-zero if a project
+# matches zero test files (no --passWithNoTests anywhere below), so a
+# misconfigured or unreachable database fails the job loudly instead of
+# quietly skipping.
+#
+# No deployment/release automation here on purpose — there is no hosting
+# target chosen yet (see ARCHITECTURE.md); that is a separate decision for
+# the lead architect.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A second push to the same branch/PR should cancel the run already in
+# flight for it, not queue behind it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege at the workflow level. Nothing in this pipeline pushes
+# code, comments on PRs, or writes packages — it only reads the checkout and
+# reports its own status.
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Static checks: no database needed, so this job has nothing to wait on
+  # and runs in parallel with `test`.
+  # ---------------------------------------------------------------------
+  checks:
+    name: Typecheck & lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Reads "engines.node" from package.json (">=20.11") rather than a
+          # hand-picked version repeated in this file — one source of truth.
+          node-version-file: package.json
+          cache: npm
+
+      - name: Pin npm to the version this repo declares
+        # package.json pins "packageManager": "npm@12.0.2". setup-node has no
+        # equivalent of Corepack for npm itself, so pin it explicitly rather
+        # than trusting whatever npm ships with the Node version above.
+        run: npm install -g "npm@$(node -p "require('./package.json').packageManager.split('@')[1]")"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  # ---------------------------------------------------------------------
+  # Full test suite, including integration tests against real Postgres.
+  #
+  # PACHKA_TEST_DATABASE_URL puts tests/harness/cluster.ts into EXTERNAL
+  # mode (see its comment: "a Postgres container in CI") instead of having
+  # it initdb its own ephemeral cluster — the runner already gives us one as
+  # a service container, which is faster and needs no local initdb/pg_ctl.
+  #
+  # Version: TESTING.md and tests/harness/cluster.ts both point local
+  # contributors at `postgresql@16`; pinned here to match.
+  # ---------------------------------------------------------------------
+  test:
+    name: Test (unit, ui, integration — real Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      # Deliberately the only env var this job sets. No Supabase URL, no
+      # anon/service-role key: src/shared/config/env.ts parses those lazily
+      # (see its header comment) and nothing reached by typecheck, lint, or
+      # `npm test` calls serverEnv()/publicEnv(), so none of that needs to
+      # exist here — which also means no secret is ever exposed to this job.
+      PACHKA_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Pin npm to the version this repo declares
+        run: npm install -g "npm@$(node -p "require('./package.json').packageManager.split('@')[1]")"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Postgres
+        # The service's healthcheck already gates job start, but confirm the
+        # exact URL the test harness will use is actually reachable before
+        # spending time on the suite.
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 1
+          done
+          echo "Postgres never became ready" >&2
+          exit 1
+
+      - name: Test — unit + ui + integration
+        # This is the same `npm test` documented in TESTING.md as "the whole
+        # setup". It runs all three Vitest projects, including integration,
+        # which applies every migration in db/migrations to a real database
+        # via tests/harness/global-setup.ts before any test runs — this *is*
+        # the "migrations apply cleanly from empty" check and the
+        # forward-only-convention check (tests/unit/migration-convention.test.ts
+        # is one of the unit-project files this step runs; it is not
+        # duplicated here, only wired in by running the suite for real).
+        run: npm test
