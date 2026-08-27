@@ -162,14 +162,15 @@ describe("the real migrations", () => {
     expect(rows.map((r) => r.name)).toEqual([
       "20260827T090000_bootstrap_platform.sql",
       "20260827T090100_create_app_config.sql",
+      "20260827T101500_harden_app_config.sql",
     ]);
   });
 
-  it("seed the commission rate design.md specifies", async () => {
+  it("seed the 15% commission design.md specifies, in basis points", async () => {
     const row = await database.db.one<{ value: string; value_type: string }>(
-      "select value::text as value, value_type from app_config where key = 'platform.commission_rate'",
+      "select value::text as value, value_type from app_config where key = 'platform.commission_rate_bp'",
     );
-    expect(row).toEqual({ value: "0.15", value_type: "number" });
+    expect(row).toEqual({ value: "1500", value_type: "integer" });
   });
 
   it("seed the upload thresholds the upload-pipeline spec states", async () => {
@@ -185,13 +186,13 @@ describe("the real migrations", () => {
 
   it("keep updated_at honest through the shared trigger", async () => {
     const before = await database.db.one<{ updated_at: Date }>(
-      "select updated_at from app_config where key = 'platform.commission_rate'",
+      "select updated_at from app_config where key = 'platform.commission_rate_bp'",
     );
     await database.db.query(
-      "update app_config set value = '0.18'::jsonb where key = 'platform.commission_rate'",
+      "update app_config set value = '1800'::jsonb where key = 'platform.commission_rate_bp'",
     );
     const after = await database.db.one<{ updated_at: Date }>(
-      "select updated_at from app_config where key = 'platform.commission_rate'",
+      "select updated_at from app_config where key = 'platform.commission_rate_bp'",
     );
 
     expect(after.updated_at.getTime()).toBeGreaterThan(before.updated_at.getTime());
@@ -209,32 +210,44 @@ describe("row-level security on app_config", () => {
     await database.drop();
   });
 
-  it("is enabled on the table", async () => {
-    const row = await database.db.one<{ relrowsecurity: boolean }>(
-      "select relrowsecurity from pg_class where relname = 'app_config'",
+  it("is enabled and forced", async () => {
+    const row = await database.db.one<{ relrowsecurity: boolean; relforcerowsecurity: boolean }>(
+      "select relrowsecurity, relforcerowsecurity from pg_class where relname = 'app_config'",
     );
-    expect(row.relrowsecurity).toBe(true);
+    expect(row).toEqual({ relrowsecurity: true, relforcerowsecurity: true });
   });
 
-  it("hides non-public rows from an anonymous browser session", async () => {
-    // Exactly what the anon key gets: the `anon` role, no JWT claims.
+  it("is unreadable by an anonymous visitor", async () => {
+    // Supabase publishes /rest/v1/app_config to anyone holding the anon key,
+    // and that key ships in the client bundle. `anon` therefore has no grant at
+    // all — SECURITY.md S1-16.
+    await expect(
+      database.db.withTransaction(async (tx) => {
+        await tx.query("set local role anon");
+        await tx.query("select key from app_config");
+      }),
+    ).rejects.toThrow(/permission denied/i);
+  });
+
+  it("shows a signed-in user only the presentational rows", async () => {
     const visible = await database.db.withTransaction(async (tx) => {
-      await tx.query("set local role anon");
+      await tx.query("set local role authenticated");
       const { rows } = await tx.query<{ key: string }>("select key from app_config");
       return rows.map((r) => r.key);
     });
 
     expect(visible).toContain("returns.window_days");
-    expect(visible).not.toContain("platform.commission_rate");
+    expect(visible).not.toContain("platform.commission_rate_bp");
     expect(visible).not.toContain("moderation.operator_email");
+    expect(visible).not.toContain("matchmaker.weight_embedding");
   });
 
-  it("refuses writes from an authenticated browser session", async () => {
+  it("refuses writes from a signed-in user", async () => {
     await expect(
       database.db.withTransaction(async (tx) => {
         await tx.query("set local role authenticated");
         await tx.query(
-          "update app_config set value = '0.01'::jsonb where key = 'returns.window_days'",
+          "update app_config set value = '0'::jsonb where key = 'returns.window_days'",
         );
       }),
     ).rejects.toThrow();
@@ -243,5 +256,76 @@ describe("row-level security on app_config", () => {
       "select value::text as value from app_config where key = 'returns.window_days'",
     );
     expect(row.value).toBe("14");
+  });
+});
+
+describe("app_config bounds", () => {
+  let database: TestDatabase;
+
+  beforeEach(async () => {
+    database = await createTestDatabase();
+  });
+
+  afterEach(async () => {
+    await database.drop();
+  });
+
+  it("stores commission as integer basis points, not a float", async () => {
+    const row = await database.db.one<{ value: string; value_type: string }>(
+      "select value::text as value, value_type from app_config where key = 'platform.commission_rate_bp'",
+    );
+    expect(row).toEqual({ value: "1500", value_type: "integer" });
+
+    const legacy = await database.db.maybeOne(
+      "select 1 from app_config where key = 'platform.commission_rate'",
+    );
+    expect(legacy).toBeNull();
+  });
+
+  it.each([
+    ["a commission of 100%", "platform.commission_rate_bp", "10000"],
+    ["a negative commission", "platform.commission_rate_bp", "-100"],
+    ["a thirty-day reservation hold", "checkout.reservation_ttl_minutes", "43200"],
+    ["a disabled quality gate", "upload.min_shorter_edge_px", "0"],
+    ["a ranking weight that swamps every other signal", "matchmaker.weight_embedding", "99"],
+    ["an unlawful cancellation fee", "returns.cancellation_fee_rate", "0.25"],
+  ])("refuses %s", async (_case, key, value) => {
+    await expect(
+      database.db.query("update app_config set value = $2::jsonb where key = $1", [key, value]),
+    ).rejects.toThrow(/app_config_value_within_bounds/);
+
+    // And the previous value is still what a module would read.
+    const row = await database.db.one<{ value: string }>(
+      "select value::text as value from app_config where key = $1",
+      [key],
+    );
+    expect(row.value).not.toBe(value);
+  });
+
+  it("accepts a change an operator is entitled to make", async () => {
+    await database.db.query(
+      "update app_config set value = '1200'::jsonb where key = 'platform.commission_rate_bp'",
+    );
+
+    const row = await database.db.one<{ value: string }>(
+      "select value::text as value from app_config where key = 'platform.commission_rate_bp'",
+    );
+    expect(row.value).toBe("1200");
+  });
+
+  it("refuses a value of the wrong declared type", async () => {
+    await expect(
+      database.db.query(
+        "update app_config set value = '\"fifteen percent\"'::jsonb where key = 'platform.commission_rate_bp'",
+      ),
+    ).rejects.toThrow(/app_config_value_matches_declared_type/);
+  });
+
+  it("refuses a fractional value for a key declared integer", async () => {
+    await expect(
+      database.db.query(
+        "update app_config set value = '30.5'::jsonb where key = 'checkout.reservation_ttl_minutes'",
+      ),
+    ).rejects.toThrow(/app_config_value_matches_declared_type/);
   });
 });

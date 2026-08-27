@@ -24,9 +24,9 @@ describe("harness isolation (B)", () => {
   it("starts from the migrated schema with defaults intact", async () => {
     const row = await database.db.one<{ value: string }>(
       "select value::text as value from app_config where key = $1",
-      ["platform.commission_rate"],
+      ["platform.commission_rate_bp"],
     );
-    expect(row.value).toBe("0.15");
+    expect(row.value).toBe("1500");
   });
 
   it("B: claims the shared config key and the shared table name", async () => {
