@@ -12,7 +12,7 @@ import path from "node:path";
 import { Client } from "pg";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase, type TestDatabase } from "../harness";
-import { migrate, migrationStatus } from "@/shared/db";
+import { loadMigrations, migrate, migrationStatus } from "@/shared/db";
 
 /**
  * A scratch migrations directory. The real `db/migrations` is already applied
@@ -156,14 +156,19 @@ describe("the real migrations", () => {
   });
 
   it("record themselves in the ledger", async () => {
+    // Compared against what is on disk rather than a list written out here.
+    // Ten teams add migrations to this directory in parallel; a hard-coded list
+    // makes every one of them fail a test they do not own, which teaches people
+    // to edit the assertion instead of reading it. What this test is actually
+    // for is that applying the migrations leaves one ledger row per file.
+    const onDisk = (await loadMigrations()).map((m) => m.name);
+
     const { rows } = await database.db.query<{ name: string }>(
       "select name from schema_migrations order by name",
     );
-    expect(rows.map((r) => r.name)).toEqual([
-      "20260827T090000_bootstrap_platform.sql",
-      "20260827T090100_create_app_config.sql",
-      "20260827T101500_harden_app_config.sql",
-    ]);
+
+    expect(rows.map((r) => r.name)).toEqual([...onDisk].sort());
+    expect(onDisk.length).toBeGreaterThan(0);
   });
 
   it("seed the 15% commission design.md specifies, in basis points", async () => {
