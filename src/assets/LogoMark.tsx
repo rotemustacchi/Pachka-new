@@ -1,39 +1,45 @@
 import type { SVGProps } from "react";
 
 /**
- * The two-brush-stroke logo mark from the approved mockups
- * (design/Main.dc.html, design/Catalog.dc.html header). Paths lifted
- * verbatim; colour comes from `currentColor` so callers control it with a
- * text-color utility (e.g. `text-ink`).
+ * The PACHKA brush monogram: a rho-form "P" — round bowl, single descender,
+ * and a long horizontal sweep crossing it — followed by an open "C".
+ *
+ * PLACEHOLDER. The supplied brand files are raster mockups on a paper
+ * background, so the real mark has never been exported as SVG. This is a
+ * trace, not the asset. Replace it with the designer's export before launch;
+ * see OPEN-QUESTIONS.md.
+ *
+ * An earlier version lifted the paths from design/Main.dc.html, where the
+ * first stroke ended in a leg kicking down to the right. That reads as "R",
+ * not "P". The leg is gone.
  */
 export function LogoMark({
-  width = 44,
-  height = 28,
+  width = 52,
+  height = 30,
   ...rest
 }: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      viewBox="0 0 64 40"
+      viewBox="0 0 120 62"
       width={width}
       height={height}
       role="img"
       aria-label="פאצ׳קה"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       {...rest}
     >
-      <path
-        d="M8 34 C 13 20, 21 9, 29 9 C 35 9, 37 15, 33 20 C 29 25, 21 26, 15 25 C 21 30, 26 34, 30 38"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="4.6"
-        strokeLinecap="round"
-      />
-      <path
-        d="M61 14 C 57 8, 47 6, 42 12 C 35 20, 38 31, 47 32 C 53 32, 58 28, 60 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="4.6"
-        strokeLinecap="round"
-      />
+      {/* Bowl of the P, closing back onto the stem rather than kicking out a leg. */}
+      <path d="M40 34 C 39 20, 47 12, 57 13 C 68 14, 73 24, 67 32 C 61 40, 48 40, 41 35" />
+      {/* Single descender, tapering away to the lower left. */}
+      <path d="M43 24 C 41 36, 38 47, 33 57" strokeWidth="6" />
+      {/* The long horizontal brush sweep that crosses the descender. */}
+      <path d="M8 33 C 20 28, 32 35, 46 30" strokeWidth="6" />
+      {/* Open C. */}
+      <path d="M113 22 C 107 12, 93 9, 84 17 C 74 26, 77 43, 89 45 C 99 47, 108 41, 112 34" />
     </svg>
   );
 }
