@@ -61,31 +61,41 @@ export const payoutLedgerUnavailable: PayoutLedgerPort = {
 };
 
 // ---------------------------------------------------------------------------
-// artworks
+// uploads
 // ---------------------------------------------------------------------------
+//
+// `artworks` used to be a port here too. It has since shipped, and
+// ARCHITECTURE.md's dependency table allows moderation -> artworks, so
+// `takedown.ts` imports `removeArtwork` directly and the port is gone. This one
+// stays because `uploads` has not shipped: `upload_events` is its table, and
+// the queue needs to read the pipeline's verdicts out of it.
 
-export interface RemovedArtwork {
+export interface FlaggedUpload {
   readonly artworkId: string;
-  readonly artistId: string;
-  /** The state it was in before the takedown, for the audit entry. */
-  readonly previousStatus: string;
+  readonly flaggedAt: Date;
+  /** Why the pipeline could not clear it, e.g. safety screening was unavailable. */
+  readonly note: string;
 }
 
-export interface ArtworkModerationPort {
-  /**
-   * Move one artwork to `removed`, inside the caller's transaction.
-   *
-   * `removed` must be terminal for the artist: ARCHITECTURE.md task 3.8 and the
-   * moderation spec both require that the artist cannot republish it. That rule
-   * belongs to the artworks lifecycle state machine, not here.
-   *
-   * Must NOT touch orders. The spec: "Takedown SHALL NOT affect orders already
-   * placed for that artwork."
-   */
-  remove(sql: Sql, artworkId: string, reason: string): Promise<RemovedArtwork>;
-  /** Artist ids for artworks currently `published`. Used to size a suspension. */
-  publishedCountFor(sql: Sql, artistId: string): Promise<number>;
+export interface FlaggedUploadSource {
+  /** Uploads awaiting a human decision, newest first. */
+  flaggedForReview(sql: Sql, limit: number): Promise<readonly FlaggedUpload[]>;
 }
+
+/**
+ * The stand-in until `uploads` ships.
+ *
+ * Returning nothing is the honest answer and, unusually, a safe one: there is
+ * no pipeline, so nothing has been flagged. It fails CLOSED in the sense that
+ * matters -- an empty queue under-reports work to do, it does not let anything
+ * through a gate. Contrast `payoutLedgerUnavailable`, which cannot say "nothing
+ * owed" safely and says "unknown" instead.
+ */
+export const noFlaggedUploads: FlaggedUploadSource = {
+  async flaggedForReview(): Promise<readonly FlaggedUpload[]> {
+    return [];
+  },
+};
 
 // ---------------------------------------------------------------------------
 // mail
