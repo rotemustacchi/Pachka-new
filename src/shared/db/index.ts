@@ -24,3 +24,10 @@ export {
   type Migration,
   type MigrationStatus,
 } from "./migrations";
+// Auth and storage only — subject to RLS. Module data access does not use
+// these; see the header comment in ./supabase.ts and db/README.md.
+export {
+  createSupabaseBrowserClient,
+  createSupabaseServerClient,
+  createSupabaseServiceRoleClient,
+} from "./supabase";

@@ -1,26 +1,89 @@
 @import "tailwindcss";
 
+/*
+ * PACHKA design tokens (openspec/changes/pachka-marketplace-mvp/design.md,
+ * "Design System" — palette and typography are final). Static values live in
+ * :root; the @theme block below exposes them as Tailwind utilities
+ * (bg-paper, text-ink-muted, border-rule, rounded-button, ...).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f5f2ea;
+  --paper-deep: #eae5d9;
+  --card: #fffdf8;
+  --ink: #14100d;
+  --ink-soft: #3d3630;
+  --ink-muted: #6e655c;
+  --rule: #d8d1c3;
+  --alert: #a33b2a;
+  --affirm: #4a6247;
 }
 
+@theme {
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-rule: var(--rule);
+  --color-alert: var(--alert);
+  --color-affirm: var(--affirm);
+
+  /* The 2px corner radius used on every button and control in the approved
+     mockups — a token so it is never a repeated magic number. */
+  --radius-button: 2px;
+
+  /* The Archivo all-caps eyebrow treatment (design.md, "Typography"): 11px
+     is the size used for section eyebrows and the "01/02/03" steps; 10px is
+     the smaller size used for the footer credit line. Tracking is shared. */
+  --text-caps: 11px;
+  --text-caps--line-height: 1;
+  --text-caps-sm: 10px;
+  --text-caps-sm--line-height: 1;
+  --tracking-caps: 0.14em;
+}
+
+/*
+ * `@theme inline` (rather than a plain @theme) because these values are
+ * themselves CSS custom properties injected at runtime by next/font
+ * (--font-heebo / --font-archivo on the <html> element) — Tailwind needs to
+ * resolve them at usage time, not bake in a value at build time.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-heebo), ui-sans-serif, system-ui, sans-serif;
+  --font-caps: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  /*
+   * Archivo, heavy weight, wide tracking, all caps — the accent treatment
+   * from the brand assets (design/Main.dc.html `.caps`). Font-size is
+   * applied separately via `text-caps` / `text-caps-sm` because the mockups
+   * use both.
+   */
+  .caps {
+    font-family: var(--font-caps);
+    font-weight: 800;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+  }
+}
+
+@layer utilities {
+  /*
+   * Numerals and prices are always Latin and always LTR, even inside RTL
+   * text (design.md, "Typography"). Wrap any rendered number/price in this.
+   */
+  .numeric {
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-feature-settings: "tnum";
+    display: inline-block;
+  }
 }
