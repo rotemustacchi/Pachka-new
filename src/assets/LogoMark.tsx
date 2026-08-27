@@ -1,28 +1,32 @@
 import type { SVGProps } from "react";
 
 /**
- * The PACHKA brush monogram — a rho-form "P" whose stem is crossed by a long
- * horizontal sweep, beside an open "C".
+ * The PACHKA brush monogram — a rho-form "P" whose descender is crossed by a
+ * long horizontal sweep, beside an open "C".
  *
- * PLACEHOLDER, traced by hand from the supplied brand renders. Those renders
- * are raster mockups photographed on paper, so the mark has never existed as
- * a vector and this is an imitation of it, not the asset. Replace it with the
- * designer's SVG export before launch — see OPEN-QUESTIONS.md.
+ * PLACEHOLDER, traced by hand from the supplied brand renders.
  *
- * The brush terminals are drawn as a few thin strokes fanning off each stroke
- * end, because the dry-bristle fray is most of what makes the original read
- * as ink rather than as a font.
+ * Every brand file supplied so far is a raster mockup photographed on paper,
+ * so no vector of this mark exists and this only imitates it. Put the real
+ * artwork in `design/brand/` and re-trace — see that folder's README.
  *
- * Colour comes from `currentColor`, so callers set it with a text utility.
+ * The thin strokes fanning off each terminal are the dry-bristle fray. They
+ * are not decoration: the fray is most of what makes the original read as ink
+ * rather than as a font, and dropping them makes the mark look like a
+ * geometric logotype.
+ *
+ * Colour comes from `currentColor`, so callers set it with a text utility and
+ * the mark follows the theme. Inline SVG, so it costs no network request and
+ * stays crisp at any size.
  */
 export function LogoMark({
-  width = 58,
-  height = 39,
+  width = 64,
+  height = 45,
   ...rest
 }: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      viewBox="0 0 300 200"
+      viewBox="0 0 1000 700"
       width={width}
       height={height}
       role="img"
@@ -33,34 +37,42 @@ export function LogoMark({
       strokeLinejoin="round"
       {...rest}
     >
-      {/* P — one continuous stroke: tail, stem, then the bowl looping back. */}
+      {/* P — one continuous stroke: tail, descender, then the bowl looping back. */}
       <path
-        d="M84 188 C 92 148, 99 112, 104 82 C 110 44, 130 24, 152 29 C 173 34, 179 62, 160 78 C 141 95, 114 92, 102 80"
-        strokeWidth="19"
+        d="M285 640 C 310 520, 345 400, 372 310 C 400 205, 415 135, 470 112 C 545 80, 600 150, 570 228 C 540 305, 435 322, 378 282"
+        strokeWidth="62"
       />
-      {/* The horizontal sweep crossing the stem. */}
-      <path d="M28 106 C 52 94, 78 104, 120 90" strokeWidth="16" />
+      {/* The long horizontal sweep crossing the descender. */}
+      <path
+        d="M18 268 C 110 250, 250 330, 380 348 C 440 356, 490 350, 525 330"
+        strokeWidth="52"
+      />
 
-      {/* Dry-bristle fray: sweep, left terminal. */}
-      <path d="M20 100 C 40 92, 60 96, 76 96" strokeWidth="2.6" />
-      <path d="M22 112 C 44 104, 62 108, 80 106" strokeWidth="2.2" />
-      <path d="M26 118 C 48 112, 64 114, 78 113" strokeWidth="1.8" />
+      {/* Dry-bristle fray — sweep, left terminal. */}
+      <path d="M6 250 C 100 236, 190 280, 268 306" strokeWidth="8" />
+      <path d="M10 282 C 108 268, 196 306, 274 330" strokeWidth="7" />
+      <path d="M20 302 C 116 292, 200 324, 276 344" strokeWidth="6" />
+      <path d="M34 318 C 126 312, 204 340, 278 356" strokeWidth="5" />
 
-      {/* Dry-bristle fray: stem, bottom terminal. */}
-      <path d="M79 186 C 84 158, 89 132, 93 112" strokeWidth="2.6" />
-      <path d="M91 190 C 95 162, 99 138, 102 118" strokeWidth="2.2" />
-      <path d="M86 196 C 90 170, 94 146, 97 124" strokeWidth="1.8" />
+      {/* Dry-bristle fray — descender, bottom tail. */}
+      <path d="M268 648 C 292 552, 318 456, 340 386" strokeWidth="8" />
+      <path d="M300 660 C 322 560, 346 466, 366 396" strokeWidth="7" />
+      <path d="M284 672 C 306 576, 330 486, 350 420" strokeWidth="6" />
+      <path d="M316 640 C 336 552, 358 470, 376 408" strokeWidth="5" />
 
       {/* C. */}
       <path
-        d="M263 44 C 250 20, 211 11, 186 31 C 153 57, 157 112, 193 123 C 226 133, 257 114, 267 91"
-        strokeWidth="19"
+        d="M905 96 C 862 40, 760 26, 690 84 C 596 162, 604 330, 704 380 C 800 428, 900 372, 934 288"
+        strokeWidth="62"
       />
-      {/* Dry-bristle fray: C, both open terminals. */}
-      <path d="M272 38 C 262 22, 244 12, 228 9" strokeWidth="2.6" />
-      <path d="M276 48 C 266 30, 248 19, 232 15" strokeWidth="2.2" />
-      <path d="M276 86 C 270 104, 256 118, 242 125" strokeWidth="2.6" />
-      <path d="M281 94 C 275 112, 261 126, 246 132" strokeWidth="2.2" />
+      {/* Dry-bristle fray — C, upper terminal. */}
+      <path d="M930 74 C 900 34, 852 8, 806 2" strokeWidth="8" />
+      <path d="M946 104 C 916 60, 866 30, 818 22" strokeWidth="7" />
+      <path d="M956 132 C 928 86, 880 54, 832 44" strokeWidth="6" />
+      {/* Dry-bristle fray — C, lower terminal. */}
+      <path d="M952 268 C 946 330, 912 386, 862 418" strokeWidth="8" />
+      <path d="M974 286 C 968 350, 932 406, 880 438" strokeWidth="7" />
+      <path d="M986 314 C 980 372, 948 424, 900 454" strokeWidth="6" />
     </svg>
   );
 }
