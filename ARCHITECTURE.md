@@ -141,7 +141,7 @@ written by its owner.
 | uploads | `upload_events`, `artwork_embeddings` |
 | matchmaker | `match_queries`, `match_impressions`, `notify_requests` |
 | orders | `orders`, `order_items`, `fulfilments`, `order_transitions`, `reservations`, `payments` |
-| shipping | `shipping_zones`, `shipping_tiers`, `shipping_rates`, `returns` |
+| shipping | `shipping_zones`, `shipping_tiers`, `shipping_rates`, `shipping_dispatches`, `returns` |
 | payouts | `payout_ledger` |
 | certificates | `certificates` |
 | moderation | `reports`, `admin_audit` |

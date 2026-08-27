@@ -89,11 +89,11 @@ Outbound parcels SHALL likewise carry the PACHKA return address rather than the 
 The system SHALL state, and apply, that the buyer bears the cost of return shipping and the risk of damage in return transit. A refund SHALL be issued after an operator records the returned artwork as received at the PACHKA return address in its original condition, or on admin resolution where a case is disputed. The artist SHALL NOT be the sole party able to release a refund, since the platform holds the buyer's money and bears the resulting liability. The platform MAY deduct a cancellation fee up to the statutory maximum.
 
 #### Scenario: Return arrives intact
-- **WHEN** an artist confirms receipt of a returned artwork in original condition
+- **WHEN** an operator records a returned artwork received at the PACHKA return address in original condition
 - **THEN** the order moves to `returned`, inventory is restored, and a refund less any applicable cancellation fee is issued
 
 #### Scenario: Return arrives damaged
-- **WHEN** an artist reports that a returned artwork arrived damaged
+- **WHEN** an operator records a returned artwork as arriving damaged
 - **THEN** the system withholds the refund, moves the case to the admin queue, and notifies both parties
 
 #### Scenario: Return never arrives
@@ -108,7 +108,7 @@ The system SHALL state, and apply, that the buyer bears the cost of return shipp
 The system SHALL restore a returned artwork to purchasable state only when the return completes with the artwork intact. A unique artwork under an unresolved return SHALL remain unavailable.
 
 #### Scenario: Unique artwork returned intact
-- **WHEN** a returned unique artwork is confirmed intact
+- **WHEN** an operator confirms a returned unique artwork intact
 - **THEN** it returns to published state and becomes purchasable again
 
 #### Scenario: Return unresolved
