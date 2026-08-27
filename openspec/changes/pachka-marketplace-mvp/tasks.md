@@ -23,16 +23,16 @@
 
 ## 3. Artwork Listings
 
-- [ ] 3.1 Create the `artworks` table with taxonomy columns, specification fields, inventory columns, and the lifecycle state column
-- [ ] 3.2 Define the taxonomy as a server-side closed set and reject any value outside it
+- [x] 3.1 Create the `artworks` table with taxonomy columns, specification fields, inventory columns, and the lifecycle state column
+- [x] 3.2 Define the taxonomy as a server-side closed set and reject any value outside it
 - [ ] 3.3 Build the multi-step artwork creation form covering images, classification, specifications, and declarations
-- [ ] 3.4 Enforce every mandatory specification field at publish time, listing all missing fields at once
-- [ ] 3.5 Implement the unique-versus-edition inventory model with quantity, made-to-order flag, and lead time
-- [ ] 3.6 Implement the originality declaration, recording account and timestamp
-- [ ] 3.7 Implement the AI-assistance declaration and the label it produces on cards and detail pages
-- [ ] 3.8 Implement the lifecycle state machine, including the rule that a removed artwork cannot be republished by its artist
-- [ ] 3.9 Block unlisting an artwork that is reserved by an in-progress order
-- [ ] 3.10 Build the artist dashboard listing view with state, price, stock, and match impressions
+- [x] 3.4 Enforce every mandatory specification field at publish time, listing all missing fields at once
+- [x] 3.5 Implement the unique-versus-edition inventory model with quantity, made-to-order flag, and lead time
+- [x] 3.6 Implement the originality declaration, recording account and timestamp
+- [x] 3.7 Implement the AI-assistance declaration and the label it produces on cards and detail pages
+- [x] 3.8 Implement the lifecycle state machine, including the rule that a removed artwork cannot be republished by its artist
+- [x] 3.9 Block unlisting an artwork that is reserved by an in-progress order
+- [x] 3.10 Build the artist dashboard listing view with state, price, stock, and match impressions
 
 ## 4. Upload Pipeline
 

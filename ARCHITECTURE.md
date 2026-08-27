@@ -99,6 +99,13 @@ harness runs as a role matching production's privileges, which makes a missing
 write policy a loud test failure instead of a silent production outage. See
 `docs/security-audit-01.md` finding 3.
 
+**`removed` is terminal for every role, admins included.** `moderation`'s
+suspension-lift restores previously published artworks "excluding any
+individually removed", which only has a stable meaning if removal is one-way.
+An admin who wants a removed artwork back asks the artist to relist it as a new
+record; there is no reinstatement edge, and adding one would make the
+suspension-lift rule ambiguous.
+
 **RLS cannot hide a column.** Supabase publishes a PostgREST data API at
 `/rest/v1/<table>` for every table in `public`, reachable by anyone holding the
 anon key — which legitimately ships in the client bundle. RLS is row-level: a
@@ -158,6 +165,18 @@ document listed a `shared/audit` module while the ownership map gave
 other modules record their admin actions by calling `moderation`'s public API
 on their own open transaction — which is what makes the action and its audit
 row atomic.
+
+**Downstream facts arrive as injected ports, never as cross-module reads.**
+`artworks` must know how many units are reserved and how often a piece has been
+matched, but the dependency table points `orders` and `matchmaker` *at*
+`artworks`, not the reverse. So `artworks` declares `InventoryDemandSource` and
+`ImpressionSource`, and those modules inject implementations.
+
+The wiring must fail **closed**. Resolving a table's existence at runtime and
+treating "absent" as "no demand" is safe for a suspension check, where absent
+means not-suspended, and unsafe here, where it means nothing is reserved — and
+sells a one-of-a-kind painting twice. An unwired demand source therefore raises
+on the first checkout rather than returning zero.
 
 **Table split for column-level secrecy.** `artist_profiles` holds only what a
 buyer may see — display name, photo, biography, city. An artist's email, phone,
