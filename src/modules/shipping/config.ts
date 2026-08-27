@@ -45,7 +45,10 @@ const PACHKA_RETURN_ADDRESS: PostalAddress = {
   countryCode: "IL",
 };
 
-export async function pachkaReturnAddress(_db: Sql): Promise<PostalAddress> {
+export async function pachkaReturnAddress(db: Sql): Promise<PostalAddress> {
+  // `db` is unused only until the key is registered. It stays in the signature
+  // so that registering it is one line here and no change at any call site.
+  void db;
   return PACHKA_RETURN_ADDRESS;
 }
 
@@ -62,7 +65,8 @@ export async function pachkaReturnAddress(_db: Sql): Promise<PostalAddress> {
  * the window governs the artist's *damage claim against PACHKA*, not the
  * buyer's refund. It still needs a deadline, or a claim stays open forever.
  */
-export async function artistResponseWindowDays(_db: Sql): Promise<number> {
+export async function artistResponseWindowDays(db: Sql): Promise<number> {
+  void db;
   return 7;
 }
 
@@ -75,6 +79,7 @@ export async function artistResponseWindowDays(_db: Sql): Promise<number> {
  * is the conservative reading (the buyer bears return shipping, and the
  * outbound leg was performed), not a decision this module is entitled to make.
  */
-export async function refundIncludesOutboundShipping(_db: Sql): Promise<boolean> {
+export async function refundIncludesOutboundShipping(db: Sql): Promise<boolean> {
+  void db;
   return false;
 }

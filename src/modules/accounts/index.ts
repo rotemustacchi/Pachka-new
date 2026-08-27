@@ -37,6 +37,14 @@ export {
 
 export type { AccountsDeps, RequestOrigin } from "./deps";
 export type { AuthGateway, AuthUser, CreateUserOutcome } from "./auth-gateway";
+// The adapter at the boundary. Thin by design and untestable by policy -- no
+// live network in tests -- so every decision worth testing sits behind the
+// interface above, not in here.
+export {
+  createSupabaseAuthGateway,
+  liftSupabaseBan,
+  type SupabaseAuthGatewayOptions,
+} from "./supabase-auth-gateway";
 
 export { normaliseEmail, register, type RegisterInput, type RegistrationResult } from "./registration";
 
