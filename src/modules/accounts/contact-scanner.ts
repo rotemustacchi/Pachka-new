@@ -97,9 +97,6 @@ const HEBREW_DIGITS: ReadonlyArray<readonly [string, string]> = [
   ["תשע", "9"], ["תשעה", "9"],
 ];
 
-/** Messaging and link-in-bio hosts, named in SECURITY.md S2-19 item 3. */
-const CONTACT_HOSTS = ["wa.me", "t.me", "instagram.com", "linktr.ee", "facebook.com", "tiktok.com"];
-
 /**
  * NFKC, controls stripped, digits and homoglyphs folded, lower-cased.
  *
@@ -207,6 +204,15 @@ function findHandles(normalised: string): ContactFinding[] {
  */
 const HOST = /(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(\/\S*)?/g;
 
+/**
+ * Any host that is not PACHKA's own.
+ *
+ * SECURITY.md S2-19 item 3 names `wa.me`, `t.me`, `instagram.com` and
+ * `linktr.ee` specifically. They are not listed anywhere in this file, on
+ * purpose: an allowlist covers them and covers the next link-in-bio service
+ * too, whereas a denylist of four hosts is a denylist somebody has to keep
+ * updating and will not. The named four are covered by the tests.
+ */
 function findLinks(normalised: string): ContactFinding[] {
   const findings: ContactFinding[] = [];
   const seen = new Set<string>();
