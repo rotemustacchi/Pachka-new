@@ -1,9 +1,9 @@
 ## 1. Foundation
 
 - [x] 1.1 Initialise the Next.js App Router project with TypeScript, Tailwind, and ESLint
-- [ ] 1.2 Set the document to `dir="rtl"` and `lang="he"`, and configure Tailwind to use logical properties throughout
+- [x] 1.2 Set the document to `dir="rtl"` and `lang="he"`, and configure Tailwind to use logical properties throughout
 - [x] 1.3 Create the Supabase project and wire local development, staging, and production environment configuration
-- [ ] 1.4 Define the design tokens from design.md as CSS custom properties, and load Heebo and Archivo
+- [x] 1.4 Define the design tokens from design.md as CSS custom properties, and load Heebo and Archivo
 - [ ] 1.5 Build the base layout: header with logo, navigation, footer, and the paper-texture background
 - [ ] 1.6 Build the shared UI primitives — button with the brush-stroke primary variant, input, select, card, badge, modal, toast
 - [ ] 1.7 Add the brush-stroke SVG assets and the section-heading component that uses them

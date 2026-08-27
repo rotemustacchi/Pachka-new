@@ -54,7 +54,28 @@ The system SHALL allow a buyer to request cancellation within 14 days of deliver
 
 #### Scenario: Buyer requests a return in time
 - **WHEN** a buyer requests cancellation 10 days after delivery
-- **THEN** the system accepts the request, moves the order to `return_requested`, and issues return instructions
+- **THEN** the system accepts the request, moves the order to `return_requested`, and issues return instructions addressed to the PACHKA return address
+
+### Requirement: Returns route through a PACHKA return address
+Returned artworks SHALL be sent to a PACHKA-operated return address, never directly to the artist, so that the artist's physical address is never disclosed to a buyer. The system SHALL issue return instructions naming only that address. On arrival, an operator SHALL record receipt and condition, and SHALL forward the artwork to the artist. The artist's own address SHALL be used only on the operator-generated forwarding label, which the buyer never sees.
+
+Outbound parcels SHALL likewise carry the PACHKA return address rather than the artist's, because a return address printed on the shipping label would otherwise disclose it on the first sale.
+
+#### Scenario: Return instructions name only PACHKA
+- **WHEN** a return request is accepted
+- **THEN** the instructions issued to the buyer name the PACHKA return address, and contain no artist address, phone number, or email
+
+#### Scenario: Operator records arrival
+- **WHEN** a returned artwork arrives at the PACHKA return address
+- **THEN** an operator records receipt and condition, and the case proceeds to refund or dispute on that record
+
+#### Scenario: Outbound label does not disclose the artist
+- **WHEN** an artist dispatches a sold artwork
+- **THEN** the return address on the parcel is the PACHKA return address
+
+#### Scenario: Forwarding does not reach the buyer
+- **WHEN** an operator forwards a returned artwork to its artist
+- **THEN** the artist's address appears only on the forwarding record, and is never exposed in any buyer-facing view or API response
 
 #### Scenario: Return window has closed
 - **WHEN** a buyer requests cancellation 20 days after delivery
@@ -65,7 +86,7 @@ The system SHALL allow a buyer to request cancellation within 14 days of deliver
 - **THEN** the return terms, including return shipping responsibility and transit risk, are visible before purchase
 
 ### Requirement: Return cost and transit risk fall on the buyer
-The system SHALL state, and apply, that the buyer bears the cost of return shipping and the risk of damage in return transit. A refund SHALL be issued after the artist confirms receipt of the returned artwork in its original condition, or on admin resolution where the artist does not respond within the configured window. The artist SHALL NOT be the sole party able to release a refund, since the platform holds the buyer's money and bears the resulting liability. The platform MAY deduct a cancellation fee up to the statutory maximum.
+The system SHALL state, and apply, that the buyer bears the cost of return shipping and the risk of damage in return transit. A refund SHALL be issued after an operator records the returned artwork as received at the PACHKA return address in its original condition, or on admin resolution where a case is disputed. The artist SHALL NOT be the sole party able to release a refund, since the platform holds the buyer's money and bears the resulting liability. The platform MAY deduct a cancellation fee up to the statutory maximum.
 
 #### Scenario: Return arrives intact
 - **WHEN** an artist confirms receipt of a returned artwork in original condition
