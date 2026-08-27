@@ -99,7 +99,7 @@ export async function consumeRateLimit(
     // `conflict` is the closest kind the taxonomy has. It maps to 409 where 429
     // would be right -- see the accounts README: `shared/errors` needs a
     // `rate_limited` kind, and that file belongs to the foundation.
-    throw AppError.conflict("Too many attempts. Please wait and try again.", {
+    throw AppError.rateLimited("Too many attempts. Please wait and try again.", {
       code: "accounts.rate_limited",
       details: { bucket },
     });

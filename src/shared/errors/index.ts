@@ -19,6 +19,12 @@ export type AppErrorKind =
   | "forbidden"
   /** The request is valid but the current state refuses it (double sale, duplicate). */
   | "conflict"
+  /**
+   * The caller is sending too fast. Distinct from `conflict`: nothing about the
+   * request is wrong and the same request will succeed once the window resets,
+   * which is what 429 tells a client and 409 does not.
+   */
+  | "rate_limited"
   /** A dependency outside PACHKA failed: AI provider, mail, payment, storage. */
   | "external_failure";
 
@@ -65,6 +71,10 @@ export class AppError extends Error {
     return new AppError("forbidden", message, options);
   }
 
+  static rateLimited(message: string, options: AppErrorOptions = {}): AppError {
+    return new AppError("rate_limited", message, options);
+  }
+
   static conflict(message: string, options: AppErrorOptions = {}): AppError {
     return new AppError("conflict", message, options);
   }
@@ -96,6 +106,7 @@ const STATUS: Record<AppErrorKind, number> = {
   not_found: 404,
   forbidden: 403,
   conflict: 409,
+  rate_limited: 429,
   external_failure: 502,
 };
 
