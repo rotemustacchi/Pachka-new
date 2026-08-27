@@ -81,12 +81,18 @@ export async function consumeReportRateLimit(
   );
 
   if (Number(count) >= REPORT_MAX_PER_WINDOW) {
-    // `conflict` is the closest kind the taxonomy has; it maps to 409 where 429
-    // would be right. `accounts` records the same gap: shared/errors needs a
-    // `rate_limited` kind, and that file belongs to the foundation.
-    throw AppError.conflict("Too many reports from this client. Please wait and try again.", {
+    // `rate_limited`, which maps to 429 -- not `conflict`/409. The distinction
+    // is not pedantry: 409 tells a client its request disagrees with the
+    // current state, when in fact the identical request succeeds once the
+    // window resets. A client written against 409 has no reason to back off,
+    // and a flood-control refusal that does not make the flooder wait is not
+    // flood control.
+    throw AppError.rateLimited("Too many reports from this client. Please wait and try again.", {
       code: "moderation.rate_limited",
-      details: { bucket: "report" satisfies ModerationRateLimitBucket },
+      details: {
+        bucket: "report" satisfies ModerationRateLimitBucket,
+        retryAfterMinutes: REPORT_WINDOW_MINUTES,
+      },
     });
   }
 }

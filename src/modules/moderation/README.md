@@ -5,17 +5,11 @@ audit. Owns `admin_audit` and `reports` (ARCHITECTURE.md ownership map).
 
 ## State of this module
 
-**Shipped:** `admin_audit` — the table, the writer, the chain verifier — and
-account suspension and reinstatement, plus the admin-only gate every other
-surface will sit behind.
+Complete for the MVP scope: the append-only `admin_audit`, public reporting,
+the admin queue, artwork takedown, and account suspension and reinstatement.
 
-**Not shipped:** public reporting, the admin queue, and artwork takedown. All
-three need `reports`, which carries a foreign key to `artworks`, and the
-artworks migration was not committed at the time this work was done. Building
-`reports` against a table that did not exist yet would have meant either
-inventing `artworks` here — two owners on one table — or dropping the foreign
-key, which is the constraint that stops a report pointing at nothing. Neither is
-a trade worth making to tick a box a day earlier.
+Two things are stubbed at a seam rather than built, because the modules that
+own them have not shipped — see "What this module needs from others" below.
 
 ## The audit log
 
@@ -54,19 +48,32 @@ module writes another module's tables.
   `payoutLedgerUnavailable` reports `known: false` and every suspension records
   `payout_review_required: true`, so an operator can tell "nothing owed" from
   "nobody asked".
-- **`ArtworkModerationPort`** (`artworks`) — move one artwork to `removed`
-  inside the caller's transaction, without touching orders. `removed` must be
-  terminal for the artist; that rule belongs to the artworks lifecycle machine.
-- **`Mailer`** — the one genuinely external boundary here.
+- **`FlaggedUploadSource`** (`uploads`) — uploads the automated pipeline could
+  not clear, which the queue lists alongside reports. `noFlaggedUploads`
+  returns nothing until `uploads` ships, which is honest: there is no pipeline,
+  so nothing has been flagged.
+- **`Mailer`** — the operator notification and the artist's takedown notice.
+  The one genuinely external boundary here, and the only thing the tests fake.
+- **`InventoryDemandSource`** (`orders`, via `artworks`) — not consumed by
+  moderation directly, but `takeDownArtwork` passes `deps.artworks` straight
+  through to `artworks.removeArtwork`, so the composition root must supply the
+  real one once `orders` ships. The takedown tests back it with a real table and
+  assert an in-flight order is untouched by a takedown.
 
-## Config keys this module will need
+`artworks` used to be a port here and no longer is: it has shipped, and
+ARCHITECTURE.md's dependency table allows moderation → artworks, so
+`takedown.ts` imports `removeArtwork` directly.
+
+## Config keys this module needs registered
 
 `moderation.operator_email` is already registered. Reporting needs two more,
-which are **not** registered yet and are not used by any shipped code path:
+which are **not** registered yet. They are used, so until they land they are
+literals in `rate-limit.ts` marked `// TODO(config):` — the only two magic
+numbers in this module.
 
-| Key | Type | Suggested default | Why |
+| Key | Type | Default in code | Why |
 |---|---|---|---|
-| `moderation.report_window_minutes` | integer | 60 | Window over which reports are counted, per client and per subject |
+| `moderation.report_window_minutes` | integer | 60 | Window over which reports are counted, per client |
 | `moderation.report_max_per_window` | integer | 10 | Reports permitted per window. Flooding must be refused **without** inflating the recorded count |
 
 ## Conflicts reported, not resolved
@@ -82,3 +89,20 @@ which are **not** registered yet and are not used by any shipped code path:
    those two, detection falls to the hash chain, where it would have fallen
    anyway. Working around the linter by assembling the keyword at runtime would
    have defeated a guard rail on purpose, so it was left alone and reported.
+
+## Two design decisions worth arguing with
+
+**The report count is derived, never stored.** A counter column satisfies
+"group them into a single queue item showing the report count" and quietly
+breaks "the report count already recorded is not inflated by the refused
+attempts", because every path that refuses a report then has to remember not to
+increment. `count(*)` over the rows that exist cannot drift from the rows that
+exist.
+
+**Anonymous visitors get no INSERT grant on `reports`**, which is stricter than
+SECURITY.md's matrix ("anon INSERT, rate-limited"). Rate limiting is a
+server-side control — it counts prior attempts in another table and decides — so
+an anon INSERT grant on the PostgREST data API is precisely the flood the spec
+requires be refused, arriving on a path where nothing counts it. A test asserts
+the anonymous insert is refused, which is what makes every rate-limit test above
+it meaningful rather than decorative.
