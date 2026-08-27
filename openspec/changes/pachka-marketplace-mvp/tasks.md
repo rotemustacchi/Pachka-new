@@ -129,15 +129,15 @@
 
 ## 11. Moderation and Admin
 
-- [ ] 11.1 Create the `reports` and `admin_audit` tables
-- [ ] 11.2 Add the report action to artwork detail pages and artist profiles, available to anonymous visitors, with a required reason
-- [ ] 11.3 Group repeated reports on one subject into a single queue item with a count
-- [ ] 11.4 Send report notifications to the configured operator address, recording the report even when email fails
+- [x] 11.1 Create the `reports` and `admin_audit` tables
+- [x] 11.2 Add the report action to artwork detail pages and artist profiles, available to anonymous visitors, with a required reason
+- [x] 11.3 Group repeated reports on one subject into a single queue item with a count
+- [x] 11.4 Send report notifications to the configured operator address, recording the report even when email fails
 - [ ] 11.5 Build the admin queue listing open reports and pipeline-flagged uploads, resolvable as dismissed or actioned with a note
-- [ ] 11.6 Restrict every admin surface to the admin role, returning not-found otherwise
-- [ ] 11.7 Implement artwork takedown that withdraws from all public surfaces, notifies the artist, and leaves in-flight orders unaffected
-- [ ] 11.8 Implement account suspension and reinstatement, including handling of outstanding payouts
-- [ ] 11.9 Write append-only audit entries for every admin action
+- [x] 11.6 Restrict every admin surface to the admin role, returning not-found otherwise
+- [x] 11.7 Implement artwork takedown that withdraws from all public surfaces, notifies the artist, and leaves in-flight orders unaffected
+- [x] 11.8 Implement account suspension and reinstatement, including handling of outstanding payouts
+- [x] 11.9 Write append-only audit entries for every admin action
 
 ## 12. Launch Readiness
 
