@@ -26,7 +26,6 @@ src/
     ui/                # design-system primitives, tokens
     money/             # integer agorot helpers
     errors/            # AppError taxonomy
-    audit/             # append-only admin audit writer
   app/                 # routes only — thin, no business logic
 ```
 
@@ -146,10 +145,19 @@ written by its owner.
 | payouts | `payout_ledger` |
 | certificates | `certificates` |
 | moderation | `reports`, `admin_audit` |
+
 | shared | `app_config` |
 
 Foreign keys across module boundaries are permitted and expected. Writes are
 not.
+
+**The audit writer lives with the table it writes.** An earlier draft of this
+document listed a `shared/audit` module while the ownership map gave
+`admin_audit` to `moderation`. The map wins: the writer is
+`modules/moderation/audit.ts`. It takes an `Sql` and holds no module state, so
+other modules record their admin actions by calling `moderation`'s public API
+on their own open transaction — which is what makes the action and its audit
+row atomic.
 
 **Table split for column-level secrecy.** `artist_profiles` holds only what a
 buyer may see — display name, photo, biography, city. An artist's email, phone,
