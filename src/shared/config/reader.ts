@@ -7,7 +7,7 @@
 import { AppError } from "@/shared/errors";
 import type { Sql } from "@/shared/db";
 import { invalidateCache, readCache, writeCache } from "./cache";
-import { CONFIG_REGISTRY, type ConfigKey, type ConfigValue, type ConfigKeyDef } from "./registry";
+import { boundsFor, CONFIG_REGISTRY, type ConfigKey, type ConfigValue, type ConfigKeyDef } from "./registry";
 import { assertConfigValueMatchesType } from "./validate";
 
 interface ConfigRow {
@@ -70,11 +70,39 @@ export async function getConfig<K extends ConfigKey>(db: Sql, key: K): Promise<C
       );
     }
     assertConfigValueMatchesType(key, definition.valueType, row.value);
-    resolved = row.value as ConfigValue<K>;
+    resolved = withinBoundsOrDefault(key, definition, row.value) as ConfigValue<K>;
   }
 
   writeCache(db, key, resolved);
   return resolved;
+}
+
+/**
+ * Fail closed when a stored numeric value is outside its declared bounds.
+ *
+ * The database constraint added in `20260827T101500_harden_app_config.sql` is
+ * the primary defence, and it is what stops a compromised admin session storing
+ * a 100% commission. This is the second line: a value that got past it — a
+ * hand-edited row, a backup restored from before the constraint existed, a
+ * replication artefact — must not be *acted on*.
+ *
+ * SECURITY.md S1-16 requires the fallback to be the compiled-in safe default,
+ * never zero and never the stored value. Deliberately not a throw: this runs on
+ * every checkout, and taking the site down over one bad row would turn a
+ * configuration error into an outage. The read is reported and then survives.
+ */
+function withinBoundsOrDefault<T>(key: ConfigKey, definition: ConfigKeyDef<T>, value: unknown): T {
+  const bounds = boundsFor(key);
+  if (!bounds || typeof value !== "number") return value as T;
+  if (value >= bounds.min && value <= bounds.max) return value as T;
+
+  console.error(
+    `app_config."${key}" holds ${value}, outside its permitted range ` +
+      `[${bounds.min}, ${bounds.max}]. Falling back to the built-in default ` +
+      `${JSON.stringify(definition.default)}. Fix the row — a value this far out ` +
+      `usually means the row was edited around the database constraint.`,
+  );
+  return definition.default;
 }
 
 /**
@@ -93,6 +121,7 @@ export async function setConfig<K extends ConfigKey>(
 ): Promise<void> {
   const definition = definitionFor(key);
   assertConfigValueMatchesType(key, definition.valueType, value);
+  assertWithinBounds(key, value);
 
   await db.query(
     `insert into app_config (key, value, value_type, description, is_public)
@@ -102,6 +131,23 @@ export async function setConfig<K extends ConfigKey>(
   );
 
   invalidateConfig(db, key);
+}
+
+/**
+ * Reject an out-of-bounds write outright.
+ *
+ * Reading falls back so a bad row cannot cause an outage; writing throws,
+ * because there is a caller to tell and nothing has been committed yet.
+ */
+function assertWithinBounds(key: ConfigKey, value: unknown): void {
+  const bounds = boundsFor(key);
+  if (!bounds || typeof value !== "number") return;
+  if (value >= bounds.min && value <= bounds.max) return;
+
+  throw AppError.validation(
+    `app_config."${key}" must be between ${bounds.min} and ${bounds.max}; refused ${value}.`,
+    { code: "config.out_of_bounds", details: { key, value, ...bounds } },
+  );
 }
 
 /** Explicit cache invalidation for the path that changes a value out of band. */

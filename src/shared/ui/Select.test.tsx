@@ -17,7 +17,8 @@ describe("Select", () => {
     await user.selectOptions(select, "ceramics");
 
     expect(select.value).toBe("ceramics");
-    expect(screen.getByRole("option", { name: "קרמיקה ואובייקטים" }).selected).toBe(true);
+    const ceramicsOption = screen.getByRole("option", { name: "קרמיקה ואובייקטים" }) as HTMLOptionElement;
+    expect(ceramicsOption.selected).toBe(true);
   });
 
   it("marks the field invalid and announces the error", () => {

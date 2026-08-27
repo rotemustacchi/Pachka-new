@@ -6,7 +6,7 @@
 export { CURRENCY_SIGN } from "./constants";
 export type { Agorot } from "./types";
 export { agorot, nonNegativeAgorot, isAgorot, zeroAgorot } from "./types";
-export { parseAgorot, type ParseAgorotOptions } from "./parse";
+export { parseAgorot, type ParseAgorotOptions } from "./shekel-input";
 export { formatAgorot, formatAgorotCompact } from "./format";
 export {
   addAgorot,

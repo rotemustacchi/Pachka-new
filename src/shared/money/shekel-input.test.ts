@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@/shared/errors";
-import { parseAgorot } from "./parse";
+import { parseAgorot } from "./shekel-input";
 
 function captureError(fn: () => unknown): unknown {
   try {

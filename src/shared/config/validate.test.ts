@@ -69,8 +69,8 @@ describe("assertConfigValueMatchesType()", () => {
 
   it("names the offending key in the error message", () => {
     const error = captureError(() =>
-      assertConfigValueMatchesType("platform.commission_rate", "number", "oops"),
+      assertConfigValueMatchesType("platform.commission_rate_bp", "integer", "oops"),
     );
-    expect(isAppError(error) && error.message).toContain("platform.commission_rate");
+    expect(isAppError(error) && error.message).toContain("platform.commission_rate_bp");
   });
 });

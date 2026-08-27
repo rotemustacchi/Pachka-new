@@ -17,6 +17,12 @@
 
 export type ConfigValueType = "integer" | "number" | "string" | "boolean" | "json";
 
+/** Inclusive numeric range a stored value must fall within. See CONFIG_BOUNDS. */
+export interface ConfigBounds {
+  readonly min: number;
+  readonly max: number;
+}
+
 export interface ConfigKeyDef<T> {
   readonly valueType: ConfigValueType;
   readonly default: T;
@@ -29,10 +35,12 @@ function key<T>(valueType: ConfigValueType, defaultValue: T, description: string
 
 export const CONFIG_REGISTRY = {
   "platform.currency": key<string>("string", "ILS", "Trading currency. Israel-only in the MVP."),
-  "platform.commission_rate": key<number>(
-    "number",
-    0.15,
-    "Platform commission on the item subtotal, excluding shipping.",
+  // Basis points, not a fraction: ARCHITECTURE.md forbids float money, and
+  // 1500 bp is exact where 0.15 is not. SECURITY.md S1-16 sets the bound.
+  "platform.commission_rate_bp": key<number>(
+    "integer",
+    1500,
+    "Platform commission on the item subtotal in basis points (1500 = 15%), excluding shipping.",
   ),
 
   "checkout.reservation_ttl_minutes": key<number>(
@@ -135,4 +143,56 @@ export type ConfigValue<K extends ConfigKey> = (typeof CONFIG_REGISTRY)[K]["defa
 
 export function isConfigKey(value: string): value is ConfigKey {
   return Object.hasOwn(CONFIG_REGISTRY, value);
+}
+
+/**
+ * Inclusive bounds for numeric keys, mirroring the `app_config_value_within_bounds`
+ * check constraint in `db/migrations/20260827T101500_harden_app_config.sql`.
+ *
+ * Kept as a separate map rather than a field on each entry so that it reads as
+ * one table against the SQL one — `registry.test.ts` asserts the two agree, and
+ * a reviewer can check them side by side instead of hunting through the
+ * registry.
+ *
+ * They exist in two places on purpose. The database constraint is what stops a
+ * compromised admin session storing a 100% commission. These are what stop a
+ * value that got past it — a hand-edited row, a backup restored from before the
+ * constraint, a replication artefact — from being *acted on*. SECURITY.md S1-16
+ * requires the read path to fail closed rather than honour such a value.
+ */
+export const CONFIG_BOUNDS: Partial<Record<ConfigKey, ConfigBounds>> = {
+  // Money and time
+  "platform.commission_rate_bp": { min: 0, max: 5000 },
+  "checkout.reservation_ttl_minutes": { min: 5, max: 1440 },
+  "payouts.eligibility_delay_days": { min: 0, max: 180 },
+  "returns.window_days": { min: 14, max: 365 },
+  "returns.receipt_window_days": { min: 1, max: 365 },
+  // Israeli consumer law permits a cancellation fee of at most 5%.
+  "returns.cancellation_fee_rate": { min: 0, max: 0.05 },
+  "shipping.unshipped_grace_days": { min: 0, max: 60 },
+
+  // Matchmaker. Weights and normalised scores are fractions of one; a weight
+  // above one lets a single signal swamp every other.
+  "matchmaker.result_count": { min: 1, max: 50 },
+  "matchmaker.sparse_catalog_threshold": { min: 0, max: 10000 },
+  "matchmaker.over_budget_tolerance": { min: 0, max: 1 },
+  "matchmaker.minimum_score": { min: 0, max: 1 },
+  "matchmaker.tie_tolerance": { min: 0, max: 1 },
+  "matchmaker.weight_embedding": { min: 0, max: 1 },
+  "matchmaker.weight_taxonomy": { min: 0, max: 1 },
+  "matchmaker.weight_budget": { min: 0, max: 1 },
+  "matchmaker.weight_size": { min: 0, max: 1 },
+  "matchmaker.weight_freshness": { min: 0, max: 1 },
+
+  // Upload gate. Zero here switches the quality and safety gates off.
+  "upload.min_shorter_edge_px": { min: 200, max: 10000 },
+  "upload.min_file_size_bytes": { min: 1024, max: 104857600 },
+  "upload.blur_threshold": { min: 0, max: 10000 },
+  "upload.safety_confidence_threshold": { min: 0, max: 1 },
+  "upload.max_display_dimension_px": { min: 200, max: 10000 },
+  "upload.display_target_bytes": { min: 1024, max: 104857600 },
+};
+
+export function boundsFor(key: ConfigKey): ConfigBounds | undefined {
+  return CONFIG_BOUNDS[key];
 }
