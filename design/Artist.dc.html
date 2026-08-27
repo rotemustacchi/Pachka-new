@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Archivo:wght@600;800&family=Caveat+Brush&display=swap">
+  <style>
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:'Heebo',system-ui,sans-serif; background:#F5F2EA; color:#14100D; -webkit-font-smoothing:antialiased; }
+    a{ color:#14100D; text-decoration:none; } a:hover{ color:#3D3630; }
+    .wm{ font-family:'Caveat Brush',cursive; }
+    .caps{ font-family:'Archivo',sans-serif; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .grain{ position:absolute; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:multiply; }
+    .card{ background:#FFFDF8; border:1px solid #D8D1C3; }
+    .btn{ font-family:'Heebo',sans-serif; background:#14100D; color:#F5F2EA; border:0; border-radius:2px; padding:15px 38px; font-size:16px; font-weight:700; cursor:pointer; }
+    .btn-o{ font-family:'Heebo',sans-serif; background:transparent; color:#14100D; border:1.5px solid #14100D; border-radius:2px; padding:14px 32px; font-size:15px; font-weight:700; cursor:pointer; }
+    .tag{ display:inline-block; border:1px solid #D8D1C3; background:#FFFDF8; padding:5px 12px; font-size:13px; }
+  </style>
+</helmet>
+
+<div dir="rtl" style="position:relative; width:1280px;">
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="nR"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nR)" opacity="0.055"/></svg>
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:22px 48px; border-bottom:1px solid #D8D1C3;">
+    <div style="display:flex; align-items:center; gap:11px;">
+      <svg viewBox="0 0 64 40" width="40" height="25"><path d="M8 34 C 13 20, 21 9, 29 9 C 35 9, 37 15, 33 20 C 29 25, 21 26, 15 25 C 21 30, 26 34, 30 38" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/><path d="M61 14 C 57 8, 47 6, 42 12 C 35 20, 38 31, 47 32 C 53 32, 58 28, 60 24" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/></svg>
+      <span class="wm" style="font-size:27px; line-height:1;">PACHKA</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:28px; font-size:15px; font-weight:500;">
+      <a href="#">קטלוג</a><a href="#">אמנים</a><a href="#">הצטרפות כאמן</a><a href="#" style="color:#6E655C;">כניסה</a>
+    </div>
+  </header>
+
+  <section style="padding:52px 48px 40px; display:grid; grid-template-columns:180px 1fr; gap:36px; align-items:start;">
+    <div style="width:180px; height:180px; border-radius:50%; background:#EAE5D9; border:1px solid #D8D1C3; display:flex; align-items:center; justify-content:center;">
+      <svg viewBox="0 0 80 80" width="70" height="70"><circle cx="40" cy="30" r="15" fill="none" stroke="#B5ADA2" stroke-width="2"/><path d="M14 70 C 16 52, 26 46, 40 46 C 54 46, 64 52, 66 70" fill="none" stroke="#B5ADA2" stroke-width="2"/></svg>
+    </div>
+    <div>
+      <h1 style="margin:0 0 8px; font-size:42px; font-weight:900; letter-spacing:-.02em;">יעל שוורץ</h1>
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:22px; font-size:15px; color:#6E655C;">
+        <span>תל אביב</span><span>·</span><span>חברת פאצ'קה מאז 2026</span><span>·</span>
+        <span style="display:inline-flex; align-items:center; gap:5px; color:#14100D; font-weight:500;">
+          <svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 1.5l2 4.2 4.5.6-3.3 3.2.8 4.5L8 11.9 3.9 14l.8-4.5L1.4 6.3l4.6-.6z" fill="#14100D"/></svg>
+          4.9 · 11 ביקורות
+        </span>
+      </div>
+      <p style="margin:0 0 8px; font-size:17px; font-weight:300; color:#3D3630; line-height:1.75; max-width:760px; text-wrap:pretty;">
+        ציירת מתל אביב, עובדת בעיקר באקריליק על פשתן. את רוב היצירות אני מתחילה על החוף ומסיימת בסטודיו בפלורנטין. מעניין אותי הרגע שבו האור נשבר על המים ואי אפשר להגיד אם זה כתום או ורוד.
+      </p>
+      <p style="margin:0; font-size:15px; font-weight:300; color:#6E655C; line-height:1.7; max-width:760px;">
+        למדתי בבצלאל, והצגתי בשתי תערוכות קבוצתיות. כל יצירה נשלחת ממוסגרת ומוכנה לתלייה.
+      </p>
+    </div>
+  </section>
+
+  <section style="padding:0 48px 46px;">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; border-top:1px solid #D8D1C3; padding-top:26px; margin-bottom:22px;">
+      <h2 style="margin:0; font-size:24px; font-weight:900;">יצירות</h2>
+      <span style="font-size:14px; color:#6E655C;">‎8 יצירות · 3 נמכרו</span>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:18px;">
+      <div class="card"><svg viewBox="0 0 300 210" style="display:block;width:100%;height:auto;"><rect width="300" height="210" fill="#F3EEE3"/><path d="M0 134 C 70 114, 150 152, 300 124 L 300 210 L 0 210 Z" fill="#2E4756" opacity=".82"/><circle cx="228" cy="58" r="26" fill="#D9A441" opacity=".85"/></svg><div style="padding:14px;"><div style="font-size:15px; font-weight:700; margin-bottom:8px;">קו החוף, שקיעה</div><div style="font-size:15px; font-weight:700;">₪ 1,250</div></div></div>
+      <div class="card"><svg viewBox="0 0 300 210" style="display:block;width:100%;height:auto;"><rect width="300" height="210" fill="#EFEADF"/><path d="M0 150 C 90 132, 180 166, 300 140 L 300 210 L 0 210 Z" fill="#3F5F52" opacity=".8"/><path d="M60 96 C 96 70, 140 88, 168 66" fill="none" stroke="#14100D" stroke-width="2" opacity=".4"/></svg><div style="padding:14px;"><div style="font-size:15px; font-weight:700; margin-bottom:8px;">בוקר, פולג</div><div style="font-size:15px; font-weight:700;">₪ 980</div></div></div>
+      <div class="card" style="position:relative; opacity:.62;"><div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;"><span style="background:#14100D; color:#F5F2EA; padding:7px 16px; font-size:12px; font-weight:700;">נמכר</span></div><svg viewBox="0 0 300 210" style="display:block;width:100%;height:auto;"><rect width="300" height="210" fill="#EDE9E0"/><path d="M0 158 C 110 140, 200 172, 300 148 L 300 210 L 0 210 Z" fill="#5A4636" opacity=".8"/><circle cx="86" cy="66" r="30" fill="#C4442E" opacity=".7"/></svg><div style="padding:14px;"><div style="font-size:15px; font-weight:700; margin-bottom:8px;">אדמה מס׳ 2</div><div style="font-size:15px; font-weight:700;">₪ 760</div></div></div>
+      <div class="card"><svg viewBox="0 0 300 210" style="display:block;width:100%;height:auto;"><rect width="300" height="210" fill="#FBF7EE"/><path d="M40 176 C 70 96, 108 58, 148 58 C 186 58, 198 104, 176 140" fill="none" stroke="#14100D" stroke-width="3"/><circle cx="206" cy="110" r="34" fill="#D9A441" opacity=".55"/></svg><div style="padding:14px;"><div style="font-size:15px; font-weight:700; margin-bottom:8px;">אור נשבר</div><div style="font-size:15px; font-weight:700;">₪ 1,420</div></div></div>
+    </div>
+  </section>
+
+  <section style="padding:0 48px 60px;">
+    <h2 style="margin:0 0 22px; font-size:24px; font-weight:900; border-top:1px solid #D8D1C3; padding-top:26px;">ביקורות</h2>
+    <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:20px;">
+      <div class="card" style="padding:22px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:11px;">
+          <span style="font-size:13px; letter-spacing:2px;">★★★★★</span>
+          <span style="font-size:14px; font-weight:700;">מיכל ר.</span>
+          <span style="font-size:13px; color:#6E655C;">· יוני 2026</span>
+        </div>
+        <p style="margin:0; font-size:15px; font-weight:300; color:#3D3630; line-height:1.65;">הגיע ארוז מצוין ובדיוק בזמן. הצבעים בפועל אפילו יותר עמוקים מבתמונה. תלוי אצלי בסלון וכולם שואלים עליו.</p>
+      </div>
+      <div class="card" style="padding:22px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:11px;">
+          <span style="font-size:13px; letter-spacing:2px;">★★★★<span style="color:#C9C0B2;">★</span></span>
+          <span style="font-size:14px; font-weight:700;">אורי כ.</span>
+          <span style="font-size:13px; color:#6E655C;">· מאי 2026</span>
+        </div>
+        <p style="margin:0; font-size:15px; font-weight:300; color:#3D3630; line-height:1.65;">יצירה יפהפייה. לקח יומיים יותר ממה שכתוב, אבל שווה את ההמתנה. המסגור איכותי.</p>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

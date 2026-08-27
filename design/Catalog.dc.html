@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Archivo:wght@600;800&family=Caveat+Brush&display=swap">
+  <style>
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:'Heebo',system-ui,sans-serif; background:#F5F2EA; color:#14100D; -webkit-font-smoothing:antialiased; }
+    a{ color:#14100D; text-decoration:none; } a:hover{ color:#3D3630; }
+    .wm{ font-family:'Caveat Brush',cursive; }
+    .caps{ font-family:'Archivo',sans-serif; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .grain{ position:absolute; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:multiply; }
+    .card{ background:#FFFDF8; border:1px solid #D8D1C3; }
+    .btn{ font-family:'Heebo',sans-serif; background:#14100D; color:#F5F2EA; border:0; border-radius:2px; padding:15px 38px; font-size:16px; font-weight:700; cursor:pointer; }
+    .btn-o{ font-family:'Heebo',sans-serif; background:transparent; color:#14100D; border:1.5px solid #14100D; border-radius:2px; padding:14px 32px; font-size:15px; font-weight:700; cursor:pointer; }
+    .tag{ display:inline-block; border:1px solid #D8D1C3; background:#FFFDF8; padding:5px 12px; font-size:13px; }
+  </style>
+</helmet>
+
+<div dir="rtl" style="position:relative; width:1280px;">
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="nC"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nC)" opacity="0.055"/></svg>
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:22px 48px; border-bottom:1px solid #D8D1C3;">
+    <div style="display:flex; align-items:center; gap:11px;">
+      <svg viewBox="0 0 64 40" width="40" height="25"><path d="M8 34 C 13 20, 21 9, 29 9 C 35 9, 37 15, 33 20 C 29 25, 21 26, 15 25 C 21 30, 26 34, 30 38" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/><path d="M61 14 C 57 8, 47 6, 42 12 C 35 20, 38 31, 47 32 C 53 32, 58 28, 60 24" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/></svg>
+      <span class="wm" style="font-size:27px; line-height:1;">PACHKA</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:28px; font-size:15px; font-weight:500;">
+      <a href="#">קטלוג</a><a href="#">אמנים</a><a href="#">הצטרפות כאמן</a><a href="#" style="color:#6E655C;">כניסה</a>
+    </div>
+  </header>
+
+  <div style="display:grid; grid-template-columns:250px 1fr; gap:44px; padding:40px 48px 70px;">
+
+    <aside>
+      <div style="font-size:19px; font-weight:900; margin-bottom:24px;">סינון</div>
+
+      <div style="border-top:1px solid #D8D1C3; padding-top:20px; margin-bottom:22px;">
+        <div style="font-size:14px; font-weight:700; margin-bottom:13px;">מדיום</div>
+        <div style="display:flex; flex-direction:column; gap:10px; font-size:14px; font-weight:300;">
+          <label style="display:flex; align-items:center; gap:9px;"><span style="width:14px; height:14px; border:1px solid #14100D; background:#14100D; display:inline-block;"></span>ציור ואיור</label>
+          <label style="display:flex; align-items:center; gap:9px;"><span style="width:14px; height:14px; border:1px solid #D8D1C3; display:inline-block;"></span>צילום</label>
+          <label style="display:flex; align-items:center; gap:9px;"><span style="width:14px; height:14px; border:1px solid #14100D; background:#14100D; display:inline-block;"></span>קרמיקה ואובייקטים</label>
+          <label style="display:flex; align-items:center; gap:9px;"><span style="width:14px; height:14px; border:1px solid #D8D1C3; display:inline-block;"></span>תכשיטים</label>
+          <label style="display:flex; align-items:center; gap:9px;"><span style="width:14px; height:14px; border:1px solid #D8D1C3; display:inline-block;"></span>טקסטיל וביגוד</label>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #D8D1C3; padding-top:20px; margin-bottom:22px;">
+        <div style="font-size:14px; font-weight:700; margin-bottom:13px;">סגנון</div>
+        <div style="display:flex; flex-wrap:wrap; gap:7px;">
+          <span class="tag" style="background:#14100D; color:#F5F2EA; border-color:#14100D;">מינימליסטי</span>
+          <span class="tag">אבסטרקטי</span><span class="tag">בוהו וחופי</span><span class="tag">תעשייתי</span><span class="tag">פופ ארט</span>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #D8D1C3; padding-top:20px; margin-bottom:22px;">
+        <div style="font-size:14px; font-weight:700; margin-bottom:13px;">חלל</div>
+        <div style="display:flex; flex-wrap:wrap; gap:7px;">
+          <span class="tag">סלון</span><span class="tag">חדר שינה</span><span class="tag">משרד</span><span class="tag">חדר ילדים</span><span class="tag">מטבח</span>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid #D8D1C3; padding-top:20px;">
+        <div style="font-size:14px; font-weight:700; margin-bottom:16px;">מחיר</div>
+        <div style="position:relative; height:3px; background:#D8D1C3; margin-bottom:10px;">
+          <div style="position:absolute; inset-inline-start:10%; width:52%; height:3px; background:#14100D;"></div>
+          <div style="position:absolute; inset-inline-start:10%; top:-6px; width:15px; height:15px; border-radius:50%; background:#14100D; margin-inline-start:-7px;"></div>
+          <div style="position:absolute; inset-inline-start:62%; top:-6px; width:15px; height:15px; border-radius:50%; background:#14100D; margin-inline-start:-7px;"></div>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:12px; color:#6E655C;"><span>₪ 200</span><span>₪ 2,000</span></div>
+      </div>
+    </aside>
+
+    <main>
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:26px;">
+        <div>
+          <h1 style="margin:0 0 6px; font-size:34px; font-weight:900; letter-spacing:-.015em;">הקטלוג</h1>
+          <div style="font-size:14px; color:#6E655C;">‎24 יצירות · מינימליסטי · קרמיקה, ציור</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; font-size:14px;">
+          <span style="color:#6E655C;">מיון:</span>
+          <div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:9px 16px; display:flex; align-items:center; gap:22px;">
+            <span style="font-weight:500;">החדשים ביותר</span>
+            <svg viewBox="0 0 16 16" width="12" height="12"><path d="M3 6l5 5 5-5" fill="none" stroke="#14100D" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:20px;">
+
+        <div class="card"><svg viewBox="0 0 300 220" style="display:block;width:100%;height:auto;"><rect width="300" height="220" fill="#EFE7DA"/><path d="M62 184 C 54 146, 68 116, 96 104 C 84 88, 94 66, 116 66 C 138 66, 148 88, 138 104 C 168 116, 180 148, 168 184 Z" fill="#B4664A"/><path d="M184 186 C 178 154, 192 132, 212 128 C 206 110, 222 96, 238 104 C 252 112, 250 132, 236 138 C 252 150, 252 176, 236 186 Z" fill="#8C4A34"/></svg>
+          <div style="padding:15px;"><div style="font-size:15px; font-weight:700; margin-bottom:3px;">אגרטל חימר, ידני</div><div style="font-size:13px; color:#6E655C; margin-bottom:10px;">נועה ברזילי</div><div style="font-size:15px; font-weight:700;">₪ 480</div></div></div>
+
+        <div class="card"><svg viewBox="0 0 300 220" style="display:block;width:100%;height:auto;"><rect width="300" height="220" fill="#F3EEE3"/><path d="M0 140 C 70 120, 150 160, 300 130 L 300 220 L 0 220 Z" fill="#2E4756" opacity=".82"/><path d="M0 166 C 90 150, 190 180, 300 158 L 300 220 L 0 220 Z" fill="#1B2E3A" opacity=".7"/><circle cx="228" cy="62" r="28" fill="#D9A441" opacity=".85"/></svg>
+          <div style="padding:15px;"><div style="font-size:15px; font-weight:700; margin-bottom:3px;">קו החוף, שקיעה</div><div style="font-size:13px; color:#6E655C; margin-bottom:10px;">יעל שוורץ</div><div style="font-size:15px; font-weight:700;">₪ 1,250</div></div></div>
+
+        <div class="card" style="position:relative;"><div style="position:absolute; top:12px; inset-inline-start:12px; background:#EAE5D9; border:1px solid #D8D1C3; padding:4px 9px; font-size:11px; font-weight:700;">נוצר בעזרת AI</div><svg viewBox="0 0 300 220" style="display:block;width:100%;height:auto;"><rect width="300" height="220" fill="#EDE9E0"/><circle cx="106" cy="96" r="52" fill="#C4442E" opacity=".88"/><circle cx="178" cy="144" r="52" fill="#2E4756" opacity=".82"/><circle cx="214" cy="68" r="28" fill="#D9A441" opacity=".9"/></svg>
+          <div style="padding:15px;"><div style="font-size:15px; font-weight:700; margin-bottom:3px;">מעגלים, פופ</div><div style="font-size:13px; color:#6E655C; margin-bottom:10px;">איתי לוין</div><div style="font-size:15px; font-weight:700;">₪ 950</div></div></div>
+
+        <div class="card"><svg viewBox="0 0 300 220" style="display:block;width:100%;height:auto;"><rect width="300" height="220" fill="#FBF7EE"/><path d="M46 190 C 74 100, 112 58, 150 58 C 188 58, 200 108, 176 146 C 156 178, 118 186, 96 168" fill="none" stroke="#14100D" stroke-width="3"/><path d="M198 46 C 232 62, 250 106, 238 148 C 230 176, 208 194, 188 194" fill="none" stroke="#14100D" stroke-width="3"/><circle cx="150" cy="114" r="7" fill="#B4664A"/></svg>
+          <div style="padding:15px;"><div style="font-size:15px; font-weight:700; margin-bottom:3px;">קווים מס׳ 7</div><div style="font-size:13px; color:#6E655C; margin-bottom:10px;">דנה אלמוג</div><div style="font-size:15px; font-weight:700;">₪ 1,380</div></div></div>
+
+        <div class="card" style="position:relative; opacity:.65;"><div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;"><span style="background:#14100D; color:#F5F2EA; padding:8px 18px; font-size:13px; font-weight:700;">נמכר</span></div><svg viewBox="0 0 300 220" style="display:block;width:100%;height:auto;"><rect width="300" height="220" fill="#EFEADF"/><rect x="70" y="52" width="160" height="116" fill="none" stroke="#14100D" stroke-width="2"/><path d="M70 140 L 124 92 L 166 134 L 196 108 L 230 140" fill="none" stroke="#14100D" stroke-width="2"/><circle cx="192" cy="76" r="12" fill="#D9A441"/></svg>
+          <div style="padding:15px;"><div style="font-size:15px; font-weight:700; margin-bottom:3px;">נוף פנימי</div><div style="font-size:13px; color:#6E655C; margin-bottom:10px;">רון כהן</div><div style="font-size:15px; font-weight:700;">₪ 640</div></div></div>
+
+        <div class="card"><svg viewBox="0 0 300 220" style="display:block;width:100%;height:auto;"><rect width="300" height="220" fill="#F1EDE2"/><path d="M150 190 L 150 90" stroke="#4A6247" stroke-width="3"/><path d="M150 130 C 120 122, 106 96, 112 74 C 136 78, 152 104, 150 130 Z" fill="#4A6247" opacity=".85"/><path d="M150 150 C 180 142, 196 118, 190 96 C 166 100, 148 124, 150 150 Z" fill="#6B8564" opacity=".85"/></svg>
+          <div style="padding:15px;"><div style="font-size:15px; font-weight:700; margin-bottom:3px;">בוטני, אקוורל</div><div style="font-size:13px; color:#6E655C; margin-bottom:10px;">מיכל דגן</div><div style="font-size:15px; font-weight:700;">₪ 390</div></div></div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

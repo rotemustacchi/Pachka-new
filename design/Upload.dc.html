@@ -1,0 +1,160 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Archivo:wght@600;800&family=Caveat+Brush&display=swap">
+  <style>
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:'Heebo',system-ui,sans-serif; background:#F5F2EA; color:#14100D; -webkit-font-smoothing:antialiased; }
+    a{ color:#14100D; text-decoration:none; } a:hover{ color:#3D3630; }
+    .wm{ font-family:'Caveat Brush',cursive; }
+    .caps{ font-family:'Archivo',sans-serif; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .grain{ position:absolute; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:multiply; }
+    .card{ background:#FFFDF8; border:1px solid #D8D1C3; }
+    .btn{ font-family:'Heebo',sans-serif; background:#14100D; color:#F5F2EA; border:0; border-radius:2px; padding:15px 38px; font-size:16px; font-weight:700; cursor:pointer; }
+    .btn-o{ font-family:'Heebo',sans-serif; background:transparent; color:#14100D; border:1.5px solid #14100D; border-radius:2px; padding:14px 32px; font-size:15px; font-weight:700; cursor:pointer; }
+    .tag{ display:inline-block; border:1px solid #D8D1C3; background:#FFFDF8; padding:5px 12px; font-size:13px; }
+  </style>
+</helmet>
+
+<div dir="rtl" style="position:relative; width:1280px;">
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="nU"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nU)" opacity="0.055"/></svg>
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:22px 48px; border-bottom:1px solid #D8D1C3;">
+    <div style="display:flex; align-items:center; gap:11px;">
+      <svg viewBox="0 0 64 40" width="40" height="25"><path d="M8 34 C 13 20, 21 9, 29 9 C 35 9, 37 15, 33 20 C 29 25, 21 26, 15 25 C 21 30, 26 34, 30 38" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/><path d="M61 14 C 57 8, 47 6, 42 12 C 35 20, 38 31, 47 32 C 53 32, 58 28, 60 24" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/></svg>
+      <span class="wm" style="font-size:27px; line-height:1;">PACHKA</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:28px; font-size:15px; font-weight:500;">
+      <a href="#">קטלוג</a><a href="#">אמנים</a><a href="#">הצטרפות כאמן</a><a href="#" style="color:#6E655C;">כניסה</a>
+    </div>
+  </header>
+
+  <div style="padding:36px 48px 60px;">
+    <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;">
+      <h1 style="margin:0; font-size:34px; font-weight:900; letter-spacing:-.015em;">יצירה חדשה</h1>
+      <span style="font-size:14px; color:#6E655C;">טיוטה · נשמר אוטומטית</span>
+    </div>
+    <p style="margin:0 0 32px; font-size:15px; font-weight:300; color:#3D3630;">העלינו את התמונה וזיהינו בשבילכם מדיום, סגנון וצבעים. עברו על ההצעות ותקנו כל מה שלא מדויק — המילה האחרונה תמיד שלכם.</p>
+
+    <div style="display:grid; grid-template-columns:.9fr 1.1fr; gap:40px; align-items:start;">
+
+      <div>
+        <svg viewBox="0 0 500 380" style="display:block; width:100%; height:auto; border:1px solid #D8D1C3;"><rect width="500" height="380" fill="#EFE7DA"/><path d="M108 318 C 94 246, 122 190, 172 168 C 150 138, 168 98, 204 98 C 240 98, 258 138, 238 168 C 288 190, 310 248, 292 318 Z" fill="#B4664A"/><path d="M318 322 C 308 266, 332 226, 368 218 C 358 188, 386 164, 412 178 C 438 192, 434 226, 410 236 C 438 256, 436 302, 408 322 Z" fill="#8C4A34"/></svg>
+
+        <div style="border:1px solid #D8D1C3; background:#FFFDF8; padding:16px; margin-top:14px;">
+          <div style="font-size:14px; font-weight:700; margin-bottom:12px;">בדיקת איכות</div>
+          <div style="display:flex; flex-direction:column; gap:9px; font-size:13px;">
+            <div style="display:flex; align-items:center; gap:9px;"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="8" r="7" fill="#4A6247"/><path d="M4.6 8.2l2.2 2.2 4.6-4.6" fill="none" stroke="#FFFDF8" stroke-width="1.7" stroke-linecap="round"/></svg><span>רזולוציה 2400 × 1800 — עוברת</span></div>
+            <div style="display:flex; align-items:center; gap:9px;"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="8" r="7" fill="#4A6247"/><path d="M4.6 8.2l2.2 2.2 4.6-4.6" fill="none" stroke="#FFFDF8" stroke-width="1.7" stroke-linecap="round"/></svg><span>חדות התמונה — עוברת</span></div>
+            <div style="display:flex; align-items:center; gap:9px;"><svg viewBox="0 0 16 16" width="15" height="15"><circle cx="8" cy="8" r="7" fill="#4A6247"/><path d="M4.6 8.2l2.2 2.2 4.6-4.6" fill="none" stroke="#FFFDF8" stroke-width="1.7" stroke-linecap="round"/></svg><span>סינון תוכן — עוברת</span></div>
+          </div>
+        </div>
+
+        <div style="border:1px solid #D8D1C3; background:#FFFDF8; padding:16px; margin-top:12px;">
+          <div style="font-size:14px; font-weight:700; margin-bottom:12px;">צבעים שזוהו</div>
+          <div style="display:flex; gap:8px;">
+            <div style="width:38px; height:38px; background:#B4664A;"></div>
+            <div style="width:38px; height:38px; background:#8C4A34;"></div>
+            <div style="width:38px; height:38px; background:#EFE7DA;"></div>
+            <div style="width:38px; height:38px; background:#5A4636;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="margin-bottom:22px;">
+          <label style="display:block; font-size:14px; font-weight:700; margin-bottom:8px;">שם היצירה</label>
+          <div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:13px 15px; font-size:16px;">אגרטל חימר, ידני</div>
+        </div>
+
+        <div style="border:1px solid #14100D; background:#FFFDF8; padding:20px; margin-bottom:22px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+            <svg viewBox="0 0 18 18" width="15" height="15"><path d="M9 1.5l1.6 4.4 4.4 1.6-4.4 1.6L9 13.5 7.4 9.1 3 7.5l4.4-1.6z" fill="#14100D"/></svg>
+            <span style="font-size:14px; font-weight:700;">הצעות אוטומטיות</span>
+            <span style="font-size:12px; color:#6E655C;">— לחצו כדי לשנות</span>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <div style="font-size:13px; color:#6E655C; margin-bottom:8px;">מדיום</div>
+            <div style="display:flex; flex-wrap:wrap; gap:7px;">
+              <span class="tag" style="background:#14100D; color:#F5F2EA; border-color:#14100D;">קרמיקה ואובייקטים</span>
+              <span class="tag" style="color:#B5ADA2;">ציור ואיור</span><span class="tag" style="color:#B5ADA2;">צילום</span><span class="tag" style="color:#B5ADA2;">תכשיטים</span><span class="tag" style="color:#B5ADA2;">טקסטיל</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <div style="font-size:13px; color:#6E655C; margin-bottom:8px;">סגנון</div>
+            <div style="display:flex; flex-wrap:wrap; gap:7px;">
+              <span class="tag" style="background:#14100D; color:#F5F2EA; border-color:#14100D;">בוהו וחופי</span>
+              <span class="tag" style="background:#14100D; color:#F5F2EA; border-color:#14100D;">מינימליסטי</span>
+              <span class="tag" style="color:#B5ADA2;">אבסטרקטי</span><span class="tag" style="color:#B5ADA2;">תעשייתי</span><span class="tag" style="color:#B5ADA2;">פופ ארט</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <div style="font-size:13px; color:#6E655C; margin-bottom:8px;">חלל מתאים</div>
+            <div style="display:flex; flex-wrap:wrap; gap:7px;">
+              <span class="tag" style="background:#14100D; color:#F5F2EA; border-color:#14100D;">סלון</span>
+              <span class="tag" style="background:#14100D; color:#F5F2EA; border-color:#14100D;">מטבח</span>
+              <span class="tag" style="color:#B5ADA2;">חדר שינה</span><span class="tag" style="color:#B5ADA2;">משרד</span><span class="tag" style="color:#B5ADA2;">חדר ילדים</span>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:13px; color:#6E655C; margin-bottom:8px;">וייב</div>
+            <div style="display:flex; flex-wrap:wrap; gap:7px;">
+              <span class="tag" style="background:#14100D; color:#F5F2EA; border-color:#14100D;">מרגיע</span>
+              <span class="tag" style="color:#B5ADA2;">נועז</span><span class="tag" style="color:#B5ADA2;">רומנטי</span><span class="tag" style="color:#B5ADA2;">אפל ומתוחכם</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:22px;">
+          <div style="font-size:14px; font-weight:700; margin-bottom:12px;">מפרט <span style="font-weight:300; color:#6E655C; font-size:13px;">— חובה, כי לקונה אין דרך לשאול אתכם</span></div>
+          <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px; margin-bottom:12px;">
+            <div><label style="display:block; font-size:12px; color:#6E655C; margin-bottom:6px;">גובה (ס״מ)</label><div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:11px 13px; font-size:15px;">28</div></div>
+            <div><label style="display:block; font-size:12px; color:#6E655C; margin-bottom:6px;">רוחב (ס״מ)</label><div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:11px 13px; font-size:15px;">16</div></div>
+            <div><label style="display:block; font-size:12px; color:#6E655C; margin-bottom:6px;">עומק (ס״מ)</label><div style="background:#FFFDF8; border:1px solid #A33B2A; padding:11px 13px; font-size:15px; color:#A33B2A;">חסר</div></div>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px;">
+            <div><label style="display:block; font-size:12px; color:#6E655C; margin-bottom:6px;">משקל (גרם)</label><div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:11px 13px; font-size:15px;">920</div></div>
+            <div><label style="display:block; font-size:12px; color:#6E655C; margin-bottom:6px;">מחיר (₪)</label><div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:11px 13px; font-size:15px;">480</div></div>
+            <div><label style="display:block; font-size:12px; color:#6E655C; margin-bottom:6px;">ימי אספקה</label><div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:11px 13px; font-size:15px;">5</div></div>
+          </div>
+        </div>
+
+        <div style="background:#EAE5D9; border:1px solid #D8D1C3; padding:18px; margin-bottom:22px;">
+          <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:13px;">
+            <span style="width:16px; height:16px; border:1px solid #14100D; background:#14100D; flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center;"><svg viewBox="0 0 16 16" width="12" height="12"><path d="M4 8.2l2.4 2.4 5.2-5.2" fill="none" stroke="#F5F2EA" stroke-width="2" stroke-linecap="round"/></svg></span>
+            <span style="font-size:14px; font-weight:300; line-height:1.55;">אני מצהירה שהיצירה היא יצירה מקורית שלי, ושזכויות היוצרים בה שייכות לי.</span>
+          </div>
+          <div style="display:flex; align-items:flex-start; gap:10px;">
+            <span style="width:16px; height:16px; border:1px solid #14100D; flex-shrink:0; margin-top:2px; display:inline-block; background:#FFFDF8;"></span>
+            <span style="font-size:14px; font-weight:300; line-height:1.55;">היצירה נוצרה בעזרת בינה מלאכותית באופן משמעותי. <span style="color:#6E655C;">חובה לענות.</span></span>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+          <span style="font-size:13px; color:#A33B2A;">נותרו 2 שדות חובה לפני פרסום</span>
+          <div style="display:flex; gap:10px;">
+            <button class="btn-o" style="padding:13px 24px; font-size:14px;">שמירה כטיוטה</button>
+            <button class="btn" style="padding:14px 32px; font-size:15px; opacity:.4;">פרסום</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

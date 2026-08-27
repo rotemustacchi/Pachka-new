@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Archivo:wght@600;800&family=Caveat+Brush&display=swap">
+  <style>
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:'Heebo',system-ui,sans-serif; background:#F5F2EA; color:#14100D; -webkit-font-smoothing:antialiased; }
+    a{ color:#14100D; text-decoration:none; } a:hover{ color:#3D3630; }
+    .wm{ font-family:'Caveat Brush',cursive; }
+    .caps{ font-family:'Archivo',sans-serif; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .grain{ position:absolute; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:multiply; }
+    .card{ background:#FFFDF8; border:1px solid #D8D1C3; }
+    .art{ display:block; width:100%; height:230px; }
+  </style>
+</helmet>
+
+<div dir="rtl" style="position:relative; width:1280px;">
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="nB"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nB)" opacity="0.055"/></svg>
+
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:26px 56px; border-bottom:1px solid #D8D1C3;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <svg viewBox="0 0 64 40" width="44" height="28"><path d="M8 34 C 13 20, 21 9, 29 9 C 35 9, 37 15, 33 20 C 29 25, 21 26, 15 25 C 21 30, 26 34, 30 38" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/><path d="M61 14 C 57 8, 47 6, 42 12 C 35 20, 38 31, 47 32 C 53 32, 58 28, 60 24" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/></svg>
+      <span class="wm" style="font-size:30px; line-height:1;">PACHKA</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:30px; font-size:15px; font-weight:500;">
+      <a href="#">קטלוג</a><a href="#">אמנים</a><a href="#">הצטרפות כאמן</a>
+      <a href="#" style="color:#6E655C;">כניסה</a>
+    </div>
+  </header>
+
+  <section style="padding:76px 56px 66px; display:grid; grid-template-columns:1.05fr .95fr; gap:56px; align-items:center;">
+    <div>
+      <div class="caps" style="font-size:11px; color:#6E655C; margin-bottom:22px;">Your Personal Art Curator</div>
+      <h1 style="margin:0 0 22px; font-size:60px; font-weight:900; line-height:1.06; letter-spacing:-.02em; text-wrap:balance;">אמנות מקורית,<br>מותאמת לחלל שלכם.</h1>
+      <p style="margin:0 0 36px; font-size:19px; font-weight:300; color:#3D3630; line-height:1.65; max-width:480px; text-wrap:pretty;">
+        פאצ'קה מחברת בין יוצרים מהקהילה לבין הבית שמחכה ליצירה שלהם. ענו על שאלון קצר, וקבלו התאמות אישיות במקום אינסוף גלילה.
+      </p>
+      <div style="display:flex; gap:14px; align-items:center;">
+        <button style="font-family:'Heebo',sans-serif; background:#14100D; color:#F5F2EA; border:0; border-radius:2px; padding:16px 40px; font-size:16px; font-weight:700; cursor:pointer;">התחילו את ההתאמה</button>
+        <a href="#" style="font-size:16px; font-weight:500; border-bottom:1px solid #D8D1C3; padding-bottom:4px;">או עיינו בקטלוג</a>
+      </div>
+    </div>
+    <div style="position:relative;">
+      <svg viewBox="0 0 460 400" style="display:block; width:100%; height:auto; border:1px solid #D8D1C3; background:#FFFDF8;">
+        <rect x="0" y="0" width="460" height="400" fill="#FBF7EE"/>
+        <path d="M120 300 C 108 250, 118 206, 150 186 C 132 168, 136 138, 158 128 C 186 116, 214 134, 216 164 C 246 168, 262 200, 250 240 C 240 274, 208 302, 176 306 Z" fill="#B4664A" opacity=".9"/>
+        <path d="M258 312 C 250 262, 268 224, 300 210 C 292 178, 312 154, 340 158 C 368 162, 380 192, 366 216 C 392 232, 396 274, 372 298 C 350 320, 300 322, 258 312 Z" fill="#2E4756" opacity=".85"/>
+        <circle cx="330" cy="98" r="34" fill="#D9A441" opacity=".8"/>
+        <path d="M40 340 C 140 322, 320 348, 424 330" fill="none" stroke="#14100D" stroke-width="2" opacity=".35"/>
+      </svg>
+      <div style="position:absolute; inset-block-end:-16px; inset-inline-start:-16px; background:#14100D; color:#F5F2EA; padding:12px 20px;">
+        <div style="font-size:13px; font-weight:300; opacity:.7;">״כלי חימר מס׳ 3״</div>
+        <div style="font-size:15px; font-weight:700;">נועה ברזילי</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:0 56px 70px;">
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:28px;">
+      <div style="position:relative;">
+        <svg viewBox="0 0 220 40" preserveAspectRatio="none" style="position:absolute; inset-inline-start:-10px; bottom:2px; width:calc(100% + 20px); height:20px; opacity:.12;"><path d="M0 8 C 50 3, 110 14, 160 7 C 190 3, 205 11, 220 6 L 220 34 C 205 39, 190 31, 160 36 C 110 43, 50 32, 0 38 Z" fill="#14100D"/></svg>
+        <h2 style="position:relative; margin:0; font-size:30px; font-weight:900; letter-spacing:-.01em;">יצירות נבחרות</h2>
+      </div>
+      <a href="#" style="font-size:15px; color:#6E655C; border-bottom:1px solid #D8D1C3; padding-bottom:3px;">לכל הקטלוג ←</a>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:20px;">
+      <div class="card">
+        <svg class="art" viewBox="0 0 300 230"><rect width="300" height="230" fill="#EFE7DA"/><path d="M60 190 C 52 150, 66 118, 96 106 C 84 88, 94 66, 116 66 C 140 66, 150 88, 140 106 C 172 118, 184 152, 172 190 Z" fill="#B4664A"/><path d="M186 192 C 180 158, 194 136, 216 132 C 210 112, 226 98, 242 106 C 258 114, 256 136, 240 142 C 258 154, 258 182, 240 192 Z" fill="#8C4A34"/></svg>
+        <div style="padding:16px;">
+          <div style="font-size:16px; font-weight:700; margin-bottom:3px;">אגרטל חימר, ידני</div>
+          <div style="font-size:13px; color:#6E655C; margin-bottom:12px;">נועה ברזילי</div>
+          <div style="font-size:16px; font-weight:700;">₪ 480</div>
+        </div>
+      </div>
+      <div class="card">
+        <svg class="art" viewBox="0 0 300 230"><rect width="300" height="230" fill="#F3EEE3"/><path d="M0 150 C 70 128, 150 168, 300 138 L 300 230 L 0 230 Z" fill="#2E4756" opacity=".82"/><path d="M0 176 C 90 158, 190 190, 300 168 L 300 230 L 0 230 Z" fill="#1B2E3A" opacity=".7"/><circle cx="228" cy="66" r="30" fill="#D9A441" opacity=".85"/></svg>
+        <div style="padding:16px;">
+          <div style="font-size:16px; font-weight:700; margin-bottom:3px;">קו החוף, שקיעה</div>
+          <div style="font-size:13px; color:#6E655C; margin-bottom:12px;">יעל שוורץ</div>
+          <div style="font-size:16px; font-weight:700;">₪ 1,250</div>
+        </div>
+      </div>
+      <div class="card">
+        <svg class="art" viewBox="0 0 300 230"><rect width="300" height="230" fill="#FBF7EE"/><path d="M40 200 C 70 100, 110 60, 150 60 C 190 60, 205 110, 180 150 C 160 182, 120 190, 96 172" fill="none" stroke="#14100D" stroke-width="3"/><path d="M196 46 C 232 62, 252 108, 240 152 C 232 182, 210 200, 190 200" fill="none" stroke="#14100D" stroke-width="3"/><circle cx="150" cy="118" r="7" fill="#B4664A"/></svg>
+        <div style="padding:16px;">
+          <div style="font-size:16px; font-weight:700; margin-bottom:3px;">קווים מס׳ 7</div>
+          <div style="font-size:13px; color:#6E655C; margin-bottom:12px;">דנה אלמוג</div>
+          <div style="font-size:16px; font-weight:700;">₪ 720</div>
+        </div>
+      </div>
+      <div class="card">
+        <svg class="art" viewBox="0 0 300 230"><rect width="300" height="230" fill="#EDE9E0"/><circle cx="110" cy="100" r="56" fill="#C4442E" opacity=".88"/><circle cx="180" cy="150" r="56" fill="#2E4756" opacity=".82"/><circle cx="216" cy="72" r="30" fill="#D9A441" opacity=".9"/></svg>
+        <div style="padding:16px;">
+          <div style="font-size:16px; font-weight:700; margin-bottom:3px;">מעגלים, פופ</div>
+          <div style="font-size:13px; color:#6E655C; margin-bottom:12px;">איתי לוין</div>
+          <div style="font-size:16px; font-weight:700;">₪ 950</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#EAE5D9; padding:58px 56px; border-block:1px solid #D8D1C3;">
+    <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:44px;">
+      <div>
+        <div class="caps" style="font-size:11px; color:#6E655C; margin-bottom:14px;">01</div>
+        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">עונים על שאלון קצר</div>
+        <div style="font-size:15px; font-weight:300; color:#3D3630; line-height:1.6;">סגנון, חלל, וייב ותקציב. שש שאלות, פחות מדקה.</div>
+      </div>
+      <div>
+        <div class="caps" style="font-size:11px; color:#6E655C; margin-bottom:14px;">02</div>
+        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">מקבלים התאמות</div>
+        <div style="font-size:15px; font-weight:300; color:#3D3630; line-height:1.6;">האוצר הדיגיטלי מדרג את יצירות הקהילה מול מה שסיפרתם.</div>
+      </div>
+      <div>
+        <div class="caps" style="font-size:11px; color:#6E655C; margin-bottom:14px;">03</div>
+        <div style="font-size:20px; font-weight:700; margin-bottom:8px;">קונים ישירות מהאמן</div>
+        <div style="font-size:15px; font-weight:300; color:#3D3630; line-height:1.6;">היצירה נשלחת מהסטודיו, עם תעודת מקוריות דיגיטלית.</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding:56px; display:flex; align-items:center; justify-content:space-between; gap:40px;">
+    <div>
+      <div class="caps" style="font-size:11px; color:#6E655C; margin-bottom:12px;">The Artist&#39;s Platform</div>
+      <h3 style="margin:0 0 8px; font-size:28px; font-weight:900;">אתם יוצרים?</h3>
+      <p style="margin:0; font-size:16px; font-weight:300; color:#3D3630; max-width:520px; line-height:1.6;">פתחו חנות בלי עלות התחלתית. העלו תמונה, והמערכת מתייגת אותה בשבילכם.</p>
+    </div>
+    <button style="font-family:'Heebo',sans-serif; background:transparent; color:#14100D; border:1.5px solid #14100D; border-radius:2px; padding:15px 38px; font-size:16px; font-weight:700; cursor:pointer; white-space:nowrap;">הצטרפו כאמן</button>
+  </section>
+
+  <footer style="border-top:1px solid #D8D1C3; padding:30px 56px; display:flex; justify-content:space-between; align-items:center;">
+    <span class="caps" style="font-size:10px; color:#6E655C;">Empowering Creators Since 2026</span>
+    <div style="display:flex; gap:24px; font-size:13px; color:#6E655C;"><a href="#">תקנון</a><a href="#">מדיניות החזרות</a><a href="#">פרטיות</a></div>
+  </footer>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

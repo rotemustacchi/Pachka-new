@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Archivo:wght@600;800&family=Caveat+Brush&display=swap">
+  <style>
+    *{ box-sizing: border-box; }
+    body{ margin:0; font-family:'Heebo',system-ui,sans-serif; background:#F5F2EA; color:#14100D; -webkit-font-smoothing:antialiased; }
+    a{ color:#14100D; text-decoration:none; } a:hover{ color:#3D3630; }
+    .wm{ font-family:'Caveat Brush',cursive; }
+    .caps{ font-family:'Archivo',sans-serif; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .grain{ position:absolute; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:multiply; }
+    .chip{ background:#FFFDF8; border:1px solid #D8D1C3; padding:22px 20px; cursor:pointer; transition:.15s; }
+    .chip:hover{ border-color:#14100D; }
+    .chip.on{ background:#14100D; color:#F5F2EA; border-color:#14100D; }
+  </style>
+</helmet>
+
+<div dir="rtl" style="position:relative; width:1280px; min-height:900px; display:flex; flex-direction:column;">
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="nA"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nA)" opacity="0.055"/></svg>
+
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:26px 56px; border-bottom:1px solid #D8D1C3;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <svg viewBox="0 0 64 40" width="44" height="28" aria-hidden="true">
+        <path d="M8 34 C 13 20, 21 9, 29 9 C 35 9, 37 15, 33 20 C 29 25, 21 26, 15 25 C 21 30, 26 34, 30 38" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/>
+        <path d="M61 14 C 57 8, 47 6, 42 12 C 35 20, 38 31, 47 32 C 53 32, 58 28, 60 24" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/>
+      </svg>
+      <span class="wm" style="font-size:30px; line-height:1; letter-spacing:.02em;">PACHKA</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:30px; font-size:15px; font-weight:500;">
+      <a href="#">קטלוג</a>
+      <a href="#">אמנים</a>
+      <a href="#">הצטרפות כאמן</a>
+      <a href="#" style="color:#6E655C;">כניסה</a>
+    </div>
+  </header>
+
+  <div style="flex-grow:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 56px 70px;">
+
+    <div style="position:relative; margin-bottom:14px;">
+      <svg viewBox="0 0 520 44" preserveAspectRatio="none" style="position:absolute; inset-inline-start:-16px; bottom:6px; width:calc(100% + 32px); height:26px; opacity:.1;">
+        <path d="M0 8 C 80 3, 180 13, 260 7 C 340 1, 430 11, 520 5 L 520 36 C 430 41, 340 31, 260 37 C 180 43, 80 33, 0 39 Z" fill="#14100D"/>
+      </svg>
+      <h1 style="position:relative; margin:0; font-size:52px; font-weight:900; letter-spacing:-.02em; line-height:1.05;">מה מחפש הקיר שלך?</h1>
+    </div>
+
+    <p style="margin:0 0 46px; font-size:18px; font-weight:300; color:#3D3630; max-width:600px; text-align:center; line-height:1.6; text-wrap:pretty;">
+      אין תשובה נכונה. אפשר לבחור כמה סגנונות, ואפשר לדלג.
+    </p>
+
+    <div style="width:100%; max-width:880px;">
+      <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:18px;">
+        <span style="font-size:17px; font-weight:700;">1. איזה סגנון מדבר אליכם?</span>
+        <span style="font-size:13px; color:#6E655C;">אפשר לבחור כמה</span>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px;">
+        <div class="chip on" style="text-align:center;">
+          <svg viewBox="0 0 40 40" width="34" height="34" style="margin-bottom:12px;"><rect x="8" y="8" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <div style="font-size:15px; font-weight:500;">מינימליסטי</div>
+        </div>
+        <div class="chip" style="text-align:center;">
+          <svg viewBox="0 0 40 40" width="34" height="34" style="margin-bottom:12px;"><path d="M8 28 C 14 10, 24 32, 32 12" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="26" cy="24" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <div style="font-size:15px; font-weight:500;">אבסטרקטי</div>
+        </div>
+        <div class="chip" style="text-align:center;">
+          <svg viewBox="0 0 40 40" width="34" height="34" style="margin-bottom:12px;"><path d="M6 26 C 13 20, 19 30, 26 23 C 30 19, 34 22, 34 22" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M20 20 L 20 9 M20 13 L 25 10 M20 15 L 15 12" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <div style="font-size:15px; font-weight:500;">בוהו וחופי</div>
+        </div>
+        <div class="chip" style="text-align:center;">
+          <svg viewBox="0 0 40 40" width="34" height="34" style="margin-bottom:12px;"><path d="M8 32 L 8 16 L 16 16 L 16 8 L 32 8 L 32 32 Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <div style="font-size:15px; font-weight:500;">תעשייתי מודרני</div>
+        </div>
+        <div class="chip" style="text-align:center;">
+          <svg viewBox="0 0 40 40" width="34" height="34" style="margin-bottom:12px;"><circle cx="16" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="26" cy="26" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          <div style="font-size:15px; font-weight:500;">פופ ארט</div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:40px;">
+        <div style="display:flex; gap:7px; align-items:center;">
+          <span style="width:26px; height:3px; background:#14100D;"></span>
+          <span style="width:26px; height:3px; background:#D8D1C3;"></span>
+          <span style="width:26px; height:3px; background:#D8D1C3;"></span>
+          <span style="width:26px; height:3px; background:#D8D1C3;"></span>
+          <span style="width:26px; height:3px; background:#D8D1C3;"></span>
+          <span style="width:26px; height:3px; background:#D8D1C3;"></span>
+          <span style="font-size:13px; color:#6E655C; margin-inline-start:10px;">1 מתוך 6</span>
+        </div>
+        <button style="font-family:'Heebo',sans-serif; background:#14100D; color:#F5F2EA; border:0; border-radius:2px; padding:15px 46px; font-size:16px; font-weight:700; cursor:pointer;">המשך</button>
+      </div>
+    </div>
+
+    <a href="#" style="margin-top:46px; font-size:14px; color:#6E655C; border-bottom:1px solid #D8D1C3; padding-bottom:3px;">או עיינו בקטלוג המלא</a>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Archivo:wght@600;800&family=Caveat+Brush&display=swap">
+  <style>
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:'Heebo',system-ui,sans-serif; background:#F5F2EA; color:#14100D; -webkit-font-smoothing:antialiased; }
+    a{ color:#14100D; text-decoration:none; } a:hover{ color:#3D3630; }
+    .wm{ font-family:'Caveat Brush',cursive; }
+    .caps{ font-family:'Archivo',sans-serif; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .grain{ position:absolute; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:multiply; }
+    .card{ background:#FFFDF8; border:1px solid #D8D1C3; }
+    .btn{ font-family:'Heebo',sans-serif; background:#14100D; color:#F5F2EA; border:0; border-radius:2px; padding:15px 38px; font-size:16px; font-weight:700; cursor:pointer; }
+    .btn-o{ font-family:'Heebo',sans-serif; background:transparent; color:#14100D; border:1.5px solid #14100D; border-radius:2px; padding:14px 32px; font-size:15px; font-weight:700; cursor:pointer; }
+    .tag{ display:inline-block; border:1px solid #D8D1C3; background:#FFFDF8; padding:5px 12px; font-size:13px; }
+  </style>
+</helmet>
+
+<div dir="rtl" style="position:relative; width:1280px;">
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="nM"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nM)" opacity="0.055"/></svg>
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:22px 48px; border-bottom:1px solid #D8D1C3;">
+    <div style="display:flex; align-items:center; gap:11px;">
+      <svg viewBox="0 0 64 40" width="40" height="25"><path d="M8 34 C 13 20, 21 9, 29 9 C 35 9, 37 15, 33 20 C 29 25, 21 26, 15 25 C 21 30, 26 34, 30 38" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/><path d="M61 14 C 57 8, 47 6, 42 12 C 35 20, 38 31, 47 32 C 53 32, 58 28, 60 24" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/></svg>
+      <span class="wm" style="font-size:27px; line-height:1;">PACHKA</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:28px; font-size:15px; font-weight:500;">
+      <a href="#">קטלוג</a><a href="#">אמנים</a><a href="#">הצטרפות כאמן</a><a href="#" style="color:#6E655C;">כניסה</a>
+    </div>
+  </header>
+  <div style="padding:52px 56px 70px;">
+    <div class="caps" style="font-size:11px; color:#6E655C; margin-bottom:16px;">Your Matches</div>
+    <h1 style="margin:0 0 14px; font-size:44px; font-weight:900; letter-spacing:-.02em;">שתי יצירות מדברות אליכם</h1>
+
+    <div style="display:flex; align-items:flex-start; gap:12px; background:#EAE5D9; border-inline-start:3px solid #14100D; padding:16px 20px; margin-bottom:14px; max-width:820px;">
+      <svg viewBox="0 0 24 24" width="19" height="19" style="flex-shrink:0; margin-top:2px;"><circle cx="12" cy="12" r="9" fill="none" stroke="#14100D" stroke-width="1.6"/><path d="M12 8v5M12 16h.01" stroke="#14100D" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <p style="margin:0; font-size:15px; font-weight:300; color:#3D3630; line-height:1.6;">
+        הקהילה שלנו עדיין בתחילת הדרך, אז מצאנו שתיים ולא שלוש. אנחנו מעדיפים להראות לכם פחות — מאשר להמציא התאמה שלא באמת מתאימה.
+      </p>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:36px;">
+      <span class="tag">מינימליסטי</span><span class="tag">סלון</span><span class="tag">מרגיע</span><span class="tag">₪400–1,200</span><span class="tag">120 ס״מ רוחב</span>
+      <a href="#" style="font-size:13px; color:#6E655C; align-self:center; margin-inline-start:8px; border-bottom:1px solid #D8D1C3;">שינוי תשובות</a>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:26px; margin-bottom:46px;">
+
+      <div class="card" style="display:flex; flex-direction:column;">
+        <div style="position:relative;">
+          <svg viewBox="0 0 560 340" style="display:block; width:100%; height:auto;"><rect width="560" height="340" fill="#F3EEE3"/><path d="M0 214 C 130 186, 280 246, 560 198 L 560 340 L 0 340 Z" fill="#2E4756" opacity=".8"/><path d="M0 256 C 170 230, 350 278, 560 246 L 560 340 L 0 340 Z" fill="#1B2E3A" opacity=".7"/><circle cx="424" cy="98" r="42" fill="#D9A441" opacity=".85"/></svg>
+          <div style="position:absolute; top:14px; inset-inline-start:14px; background:#14100D; color:#F5F2EA; padding:6px 12px; font-size:12px; font-weight:700;">התאמה 94%</div>
+        </div>
+        <div style="padding:22px; display:flex; flex-direction:column; gap:14px; flex-grow:1;">
+          <div>
+            <div style="font-size:21px; font-weight:700; margin-bottom:4px;">קו החוף, שקיעה</div>
+            <div style="font-size:14px; color:#6E655C;">יעל שוורץ · תל אביב</div>
+          </div>
+          <div style="font-size:14px; font-weight:300; color:#3D3630; line-height:1.6; border-inline-start:2px solid #D8D1C3; padding-inline-start:12px;">
+            נבחרה בגלל הפלטה המרוסנת והאופק האופקי — יושבת טוב על קיר סלון של 120 ס״מ.
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;"><span class="tag">מינימליסטי</span><span class="tag">מרגיע</span><span class="tag">100×70 ס״מ</span></div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:auto; padding-top:10px;">
+            <div style="font-size:22px; font-weight:900;">₪ 1,250</div>
+            <button class="btn" style="padding:12px 28px; font-size:15px;">לצפייה</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="display:flex; flex-direction:column;">
+        <div style="position:relative;">
+          <svg viewBox="0 0 560 340" style="display:block; width:100%; height:auto;"><rect width="560" height="340" fill="#FBF7EE"/><path d="M76 296 C 122 148, 190 88, 262 92 C 330 96, 356 176, 312 226 C 278 264, 214 274, 176 250" fill="none" stroke="#14100D" stroke-width="3.4"/><path d="M366 68 C 434 96, 468 176, 444 244 C 428 288, 390 314, 356 312" fill="none" stroke="#14100D" stroke-width="3.4"/><circle cx="264" cy="178" r="10" fill="#B4664A"/></svg>
+          <div style="position:absolute; top:14px; inset-inline-start:14px; background:#14100D; color:#F5F2EA; padding:6px 12px; font-size:12px; font-weight:700;">התאמה 88%</div>
+          <div style="position:absolute; top:14px; inset-inline-end:14px; background:#A33B2A; color:#F5F2EA; padding:6px 12px; font-size:12px; font-weight:700;">₪180 מעל התקציב</div>
+        </div>
+        <div style="padding:22px; display:flex; flex-direction:column; gap:14px; flex-grow:1;">
+          <div>
+            <div style="font-size:21px; font-weight:700; margin-bottom:4px;">קווים מס׳ 7</div>
+            <div style="font-size:14px; color:#6E655C;">דנה אלמוג · חיפה</div>
+          </div>
+          <div style="font-size:14px; font-weight:300; color:#3D3630; line-height:1.6; border-inline-start:2px solid #D8D1C3; padding-inline-start:12px;">
+            חורגת מעט מהתקציב, אבל הקו הנקי והשקט שלה תואם כמעט מושלם למה שתיארתם.
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;"><span class="tag">מינימליסטי</span><span class="tag">מרגיע</span><span class="tag">90×120 ס״מ</span></div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:auto; padding-top:10px;">
+            <div style="font-size:22px; font-weight:900;">₪ 1,380</div>
+            <button class="btn" style="padding:12px 28px; font-size:15px;">לצפייה</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid #D8D1C3; padding-top:34px; display:flex; align-items:center; justify-content:space-between; gap:30px;">
+      <div>
+        <div style="font-size:19px; font-weight:700; margin-bottom:5px;">לא מצאתם? זה בסדר.</div>
+        <div style="font-size:15px; font-weight:300; color:#3D3630;">אפשר לשנות תשובות, לעיין בקטלוג המלא, או שנעדכן אתכם כשיעלו יצירות מתאימות.</div>
+      </div>
+      <div style="display:flex; gap:12px; flex-shrink:0;">
+        <button class="btn-o">שינוי תשובות</button>
+        <button class="btn-o">לקטלוג המלא</button>
+        <button class="btn" style="padding:14px 30px; font-size:15px;">עדכנו אותי</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

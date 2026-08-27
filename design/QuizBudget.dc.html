@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=Archivo:wght@600;800&family=Caveat+Brush&display=swap">
+  <style>
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:'Heebo',system-ui,sans-serif; background:#F5F2EA; color:#14100D; -webkit-font-smoothing:antialiased; }
+    a{ color:#14100D; text-decoration:none; } a:hover{ color:#3D3630; }
+    .wm{ font-family:'Caveat Brush',cursive; }
+    .caps{ font-family:'Archivo',sans-serif; font-weight:800; letter-spacing:.14em; text-transform:uppercase; }
+    .grain{ position:absolute; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:multiply; }
+    .card{ background:#FFFDF8; border:1px solid #D8D1C3; }
+    .btn{ font-family:'Heebo',sans-serif; background:#14100D; color:#F5F2EA; border:0; border-radius:2px; padding:15px 38px; font-size:16px; font-weight:700; cursor:pointer; }
+    .btn-o{ font-family:'Heebo',sans-serif; background:transparent; color:#14100D; border:1.5px solid #14100D; border-radius:2px; padding:14px 32px; font-size:15px; font-weight:700; cursor:pointer; }
+    .tag{ display:inline-block; border:1px solid #D8D1C3; background:#FFFDF8; padding:5px 12px; font-size:13px; }
+  </style>
+</helmet>
+
+<div dir="rtl" style="position:relative; width:1280px; min-height:900px; display:flex; flex-direction:column;">
+  <svg class="grain" xmlns="http://www.w3.org/2000/svg"><filter id="nQ"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#nQ)" opacity="0.055"/></svg>
+  <header style="display:flex; align-items:center; justify-content:space-between; padding:22px 48px; border-bottom:1px solid #D8D1C3;">
+    <div style="display:flex; align-items:center; gap:11px;">
+      <svg viewBox="0 0 64 40" width="40" height="25"><path d="M8 34 C 13 20, 21 9, 29 9 C 35 9, 37 15, 33 20 C 29 25, 21 26, 15 25 C 21 30, 26 34, 30 38" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/><path d="M61 14 C 57 8, 47 6, 42 12 C 35 20, 38 31, 47 32 C 53 32, 58 28, 60 24" fill="none" stroke="#14100D" stroke-width="4.6" stroke-linecap="round"/></svg>
+      <span class="wm" style="font-size:27px; line-height:1;">PACHKA</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:28px; font-size:15px; font-weight:500;">
+      <a href="#">קטלוג</a><a href="#">אמנים</a><a href="#">הצטרפות כאמן</a><a href="#" style="color:#6E655C;">כניסה</a>
+    </div>
+  </header>
+  <div style="flex-grow:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 56px;">
+    <div style="width:100%; max-width:760px;">
+
+      <div style="display:flex; gap:7px; align-items:center; margin-bottom:44px;">
+        <span style="width:26px; height:3px; background:#14100D;"></span><span style="width:26px; height:3px; background:#14100D;"></span>
+        <span style="width:26px; height:3px; background:#14100D;"></span><span style="width:26px; height:3px; background:#14100D;"></span>
+        <span style="width:26px; height:3px; background:#14100D;"></span><span style="width:26px; height:3px; background:#D8D1C3;"></span>
+        <span style="font-size:13px; color:#6E655C; margin-inline-start:10px;">5 מתוך 6</span>
+      </div>
+
+      <h2 style="margin:0 0 10px; font-size:40px; font-weight:900; letter-spacing:-.015em;">מה התקציב שלכם?</h2>
+      <p style="margin:0 0 40px; font-size:16px; font-weight:300; color:#3D3630;">נשתמש בזה כדי לדרג, לא כדי לחסום. לפעמים היצירה הכי מתאימה חורגת קצת — ונסמן לכם בכמה.</p>
+
+      <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:18px;">
+        <span style="font-size:34px; font-weight:900;">₪ 400</span>
+        <span style="font-size:20px; color:#6E655C;">–</span>
+        <span style="font-size:34px; font-weight:900;">₪ 1,200</span>
+      </div>
+      <div style="position:relative; height:3px; background:#D8D1C3; margin:0 0 8px;">
+        <div style="position:absolute; inset-inline-start:22%; width:44%; height:3px; background:#14100D;"></div>
+        <div style="position:absolute; inset-inline-start:22%; top:-7px; width:17px; height:17px; border-radius:50%; background:#14100D; margin-inline-start:-8px;"></div>
+        <div style="position:absolute; inset-inline-start:66%; top:-7px; width:17px; height:17px; border-radius:50%; background:#14100D; margin-inline-start:-8px;"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; color:#6E655C; margin-bottom:52px;"><span>₪ 100</span><span>₪ 5,000+</span></div>
+
+      <div style="border-top:1px solid #D8D1C3; padding-top:38px;">
+        <div style="font-size:17px; font-weight:700; margin-bottom:6px;">מידות הקיר או המשטח</div>
+        <div style="font-size:14px; font-weight:300; color:#6E655C; margin-bottom:20px;">אופציונלי. עוזר לנו לא להציע לכם משהו שלא ייכנס.</div>
+        <div style="display:flex; gap:14px; align-items:center;">
+          <div style="flex-grow:1;">
+            <label style="display:block; font-size:13px; color:#6E655C; margin-bottom:7px;">רוחב (ס״מ)</label>
+            <div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:14px 16px; font-size:16px;">120</div>
+          </div>
+          <span style="color:#6E655C; margin-top:26px;">×</span>
+          <div style="flex-grow:1;">
+            <label style="display:block; font-size:13px; color:#6E655C; margin-bottom:7px;">גובה (ס״מ)</label>
+            <div style="background:#FFFDF8; border:1px solid #D8D1C3; padding:14px 16px; font-size:16px; color:#B5ADA2;">לא יודע/ת</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-top:50px;">
+        <a href="#" style="font-size:15px; color:#6E655C;">→ חזרה</a>
+        <button class="btn">המשך</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
