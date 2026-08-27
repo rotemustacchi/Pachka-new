@@ -136,6 +136,56 @@ export const CONFIG_REGISTRY = {
     "",
     "Address that receives new-report notifications. Must be set before launch.",
   ),
+
+  // Accounts. Length is the only password strength rule: composition rules push
+  // people towards Passw0rd! and away from passphrases.
+  "accounts.min_password_length": key<number>(
+    "integer",
+    10,
+    "Minimum password length at registration.",
+  ),
+  // Rate limits on the anonymous auth surface. SECURITY.md's cross-cutting rate
+  // limit table; SPEC-J records that no spec mentions rate limiting at all.
+  "accounts.registration_window_minutes": key<number>(
+    "integer",
+    60,
+    "Window over which registration attempts are counted, per IP and per address.",
+  ),
+  "accounts.registration_max_per_window": key<number>(
+    "integer",
+    5,
+    "Registration attempts permitted per window.",
+  ),
+  "accounts.signin_window_minutes": key<number>(
+    "integer",
+    15,
+    "Window over which sign-in attempts are counted, per IP and per address.",
+  ),
+  "accounts.signin_max_per_window": key<number>(
+    "integer",
+    10,
+    "Sign-in attempts permitted per window. Guards credential stuffing.",
+  ),
+  "accounts.password_reset_window_minutes": key<number>(
+    "integer",
+    60,
+    "Window over which password-reset requests are counted.",
+  ),
+  "accounts.password_reset_max_per_window": key<number>(
+    "integer",
+    3,
+    "Password-reset requests permitted per window. Also an outbound mail cap.",
+  ),
+  "accounts.artist_upgrade_window_minutes": key<number>(
+    "integer",
+    1440,
+    "Window over which artist-upgrade attempts are counted, per account.",
+  ),
+  "accounts.artist_upgrade_max_per_window": key<number>(
+    "integer",
+    3,
+    "Artist-upgrade attempts permitted per window. Guards bulk fake-artist creation.",
+  ),
 } as const satisfies Record<string, ConfigKeyDef<unknown>>;
 
 export type ConfigKey = keyof typeof CONFIG_REGISTRY;
@@ -191,6 +241,17 @@ export const CONFIG_BOUNDS: Partial<Record<ConfigKey, ConfigBounds>> = {
   "upload.safety_confidence_threshold": { min: 0, max: 1 },
   "upload.max_display_dimension_px": { min: 200, max: 10000 },
   "upload.display_target_bytes": { min: 1024, max: 104857600 },
+
+  // Accounts. Below ten characters is not a password policy, it is a formality.
+  "accounts.min_password_length": { min: 10, max: 128 },
+  "accounts.registration_window_minutes": { min: 1, max: 1440 },
+  "accounts.registration_max_per_window": { min: 1, max: 1000 },
+  "accounts.signin_window_minutes": { min: 1, max: 1440 },
+  "accounts.signin_max_per_window": { min: 1, max: 1000 },
+  "accounts.password_reset_window_minutes": { min: 1, max: 1440 },
+  "accounts.password_reset_max_per_window": { min: 1, max: 1000 },
+  "accounts.artist_upgrade_window_minutes": { min: 1, max: 43200 },
+  "accounts.artist_upgrade_max_per_window": { min: 1, max: 1000 },
 };
 
 export function boundsFor(key: ConfigKey): ConfigBounds | undefined {
