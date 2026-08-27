@@ -85,6 +85,21 @@ No magic numbers in module code.
 **Row-level security is on for every table.** A missing RLS policy is a security
 defect, not a follow-up.
 
+**Every table needs write policies, not just read policies.** A table with
+`FORCE ROW LEVEL SECURITY` and only `for select` policies permits no writes
+except by a role that bypasses RLS. That makes correctness depend on a
+deployment setting rather than on the schema, and it fails in production while
+tests stay green. Each table therefore declares explicit `for insert`,
+`for update` and `for delete` policies — with `with check` — for the roles
+entitled to them. If a table genuinely takes no writes from any application
+role, say so in a comment; silence is treated as an omission.
+
+**Tests connect as a non-superuser role.** A superuser bypasses RLS
+unconditionally, so a suite running as one can never prove a policy works. The
+harness runs as a role matching production's privileges, which makes a missing
+write policy a loud test failure instead of a silent production outage. See
+`docs/security-audit-01.md` finding 3.
+
 **RLS cannot hide a column.** Supabase publishes a PostgREST data API at
 `/rest/v1/<table>` for every table in `public`, reachable by anyone holding the
 anon key — which legitimately ships in the client bundle. RLS is row-level: a
