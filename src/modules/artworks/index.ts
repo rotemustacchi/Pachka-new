@@ -183,3 +183,33 @@ export {
   MAX_STYLES,
   MAX_TARGET_SPACES,
 } from "./limits";
+
+// ---- User-facing components. Built on `shared/ui` primitives, so the
+// brush-stroke button, the tag chip and the sold overlay are the approved
+// treatments rather than second copies of them.
+export { AiAssistedLabel, type AiAssistedLabelProps } from "./ui/AiAssistedLabel";
+export { ArtworkCard, type ArtworkCardProps } from "./ui/ArtworkCard";
+export {
+  ArtworkSpecifications,
+  specificationRows,
+  type ArtworkSpecificationsProps,
+} from "./ui/ArtworkSpecifications";
+export { DeclarationsStep, type DeclarationsStepProps } from "./ui/DeclarationsStep";
+export { TaxonomyPicker, type TaxonomyOption, type TaxonomyPickerProps } from "./ui/TaxonomyPicker";
+export { UploadStepper, type UploadStepperProps } from "./ui/UploadStepper";
+export {
+  SPECIFICATIONS_PROMPT,
+  STEP_ORDER,
+  STEP_TITLES,
+  allMissing,
+  canPublish,
+  firstIncompleteStep,
+  publishButtonCaption,
+  remainingCount,
+  stepAfter,
+  stepBefore,
+  stepStatuses,
+  type StepId,
+  type StepStatus,
+  type UploadFormState,
+} from "./ui/upload-steps";

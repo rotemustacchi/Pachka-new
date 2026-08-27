@@ -109,6 +109,13 @@ export interface PublicArtwork {
   readonly moods: readonly TaxonomyTag[];
 
   readonly inventoryType: InventoryType;
+  /**
+   * The declared edition size, which a buyer may see: "מהדורה מתוך 10" is how
+   * an edition is described, and artwork-listings makes the quantity a stated
+   * fact about the work. Distinct from `availableUnits` below, which is what is
+   * left of it.
+   */
+  readonly stock: number;
   readonly madeToOrder: boolean;
   readonly productionLeadTimeDays: number | null;
 
@@ -217,6 +224,7 @@ export function toPublicArtwork({
     moods: tags(artwork.moods as readonly Mood[], MOOD_LABELS),
 
     inventoryType: artwork.inventoryType,
+    stock: artwork.stock,
     madeToOrder: artwork.madeToOrder,
     productionLeadTimeDays: artwork.productionLeadTimeDays,
 
