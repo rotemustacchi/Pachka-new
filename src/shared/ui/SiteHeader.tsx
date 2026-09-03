@@ -1,10 +1,20 @@
 import Link from "next/link";
 import { LogoMark, Wordmark } from "@/assets";
 
+/**
+ * Every href here must resolve to a route that exists under `src/app`.
+ * `siteHeader.test.tsx` asserts exactly that, because a header link is on every
+ * page in the product and a 404 from the primary nav is the most visible
+ * possible defect.
+ *
+ * `/catalog` is served by the catalog module's route wiring; `/artists` lists
+ * artists. Both are pending, so they are commented out rather than shipped as
+ * dead links — a nav that offers nothing is better than one that offers a 404.
+ */
 const NAV_LINKS = [
-  { href: "/catalog", label: "קטלוג" },
-  { href: "/artists", label: "אמנים" },
-  { href: "/join", label: "הצטרפות כאמן" },
+  // { href: "/catalog", label: "קטלוג" },   // pending catalog route wiring
+  // { href: "/artists", label: "אמנים" },   // pending the artist index route
+  { href: "/become-an-artist", label: "הצטרפות כאמן" },
 ] as const;
 
 /**
@@ -25,7 +35,7 @@ export function SiteHeader() {
             {link.label}
           </Link>
         ))}
-        <Link href="/login" className="text-ink-muted hover:text-ink-soft">
+        <Link href="/sign-in" className="text-ink-muted hover:text-ink-soft">
           כניסה
         </Link>
       </nav>
