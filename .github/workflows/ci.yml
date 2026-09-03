@@ -82,7 +82,13 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # pgvector/pgvector, not stock postgres, because
+        # db/migrations/20260903T160000_uploads_pipeline.sql runs
+        # `create extension if not exists vector` for the matchmaker's
+        # embeddings. Stock postgres:16 does not ship that extension, so the
+        # migration — and therefore every integration test — fails on a runner
+        # while passing on a developer machine that installed it by hand.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
