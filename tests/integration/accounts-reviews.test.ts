@@ -589,14 +589,20 @@ describe("the SQL eligibility reader", () => {
     const artistId = await artistAccount(database.db);
     const buyerId = await account(database.db, "michal@example.com", "Michal R.");
     await createStandInOrders(database);
-    await database.db.query("insert into orders (id, buyer_id, status) values ($1, $2, 'delivered')", [
-      ORDER,
-      buyerId,
-    ]);
-    await database.db.query("insert into fulfilments (order_id, artist_id) values ($1, $2)", [
-      ORDER,
-      artistId,
-    ]);
+    // The real `orders` table now exists, so these are its columns, not the
+    // stand-in's. Money is stated explicitly rather than defaulted: a default
+    // of zero on a money column means a future bug creates a free order in
+    // silence.
+    await database.db.query(
+      `insert into orders (id, buyer_id, status, subtotal_agorot, shipping_agorot, total_agorot, commission_rate_bp)
+       values ($1, $2, 'delivered', 0, 0, 0, 1500)`,
+      [ORDER, buyerId],
+    );
+    await database.db.query(
+      `insert into fulfilments (order_id, artist_id, items_subtotal_agorot, shipping_agorot)
+       values ($1, $2, 0, 0)`,
+      [ORDER, artistId],
+    );
 
     const allowed = await sqlOrderEligibility.hasDeliveredOrder(database.db, {
       orderId: ORDER,
@@ -611,14 +617,16 @@ describe("the SQL eligibility reader", () => {
     const artistId = await artistAccount(database.db);
     const buyerId = await account(database.db, "michal@example.com", "Michal R.");
     await createStandInOrders(database);
-    await database.db.query("insert into orders (id, buyer_id, status) values ($1, $2, 'shipped')", [
-      ORDER,
-      buyerId,
-    ]);
-    await database.db.query("insert into fulfilments (order_id, artist_id) values ($1, $2)", [
-      ORDER,
-      artistId,
-    ]);
+    await database.db.query(
+      `insert into orders (id, buyer_id, status, subtotal_agorot, shipping_agorot, total_agorot, commission_rate_bp)
+       values ($1, $2, 'shipped', 0, 0, 0, 1500)`,
+      [ORDER, buyerId],
+    );
+    await database.db.query(
+      `insert into fulfilments (order_id, artist_id, items_subtotal_agorot, shipping_agorot)
+       values ($1, $2, 0, 0)`,
+      [ORDER, artistId],
+    );
 
     const allowed = await sqlOrderEligibility.hasDeliveredOrder(database.db, {
       orderId: ORDER,
@@ -634,14 +642,20 @@ describe("the SQL eligibility reader", () => {
     const buyerId = await account(database.db, "michal@example.com", "Michal R.");
     const strangerId = await account(database.db, "ori@example.com", "Ori K.");
     await createStandInOrders(database);
-    await database.db.query("insert into orders (id, buyer_id, status) values ($1, $2, 'delivered')", [
-      ORDER,
-      buyerId,
-    ]);
-    await database.db.query("insert into fulfilments (order_id, artist_id) values ($1, $2)", [
-      ORDER,
-      artistId,
-    ]);
+    // The real `orders` table now exists, so these are its columns, not the
+    // stand-in's. Money is stated explicitly rather than defaulted: a default
+    // of zero on a money column means a future bug creates a free order in
+    // silence.
+    await database.db.query(
+      `insert into orders (id, buyer_id, status, subtotal_agorot, shipping_agorot, total_agorot, commission_rate_bp)
+       values ($1, $2, 'delivered', 0, 0, 0, 1500)`,
+      [ORDER, buyerId],
+    );
+    await database.db.query(
+      `insert into fulfilments (order_id, artist_id, items_subtotal_agorot, shipping_agorot)
+       values ($1, $2, 0, 0)`,
+      [ORDER, artistId],
+    );
 
     const allowed = await sqlOrderEligibility.hasDeliveredOrder(database.db, {
       orderId: ORDER,
@@ -657,14 +671,20 @@ describe("the SQL eligibility reader", () => {
     const otherArtist = await account(database.db, "dana@example.com", "Dana L.");
     const buyerId = await account(database.db, "michal@example.com", "Michal R.");
     await createStandInOrders(database);
-    await database.db.query("insert into orders (id, buyer_id, status) values ($1, $2, 'delivered')", [
-      ORDER,
-      buyerId,
-    ]);
-    await database.db.query("insert into fulfilments (order_id, artist_id) values ($1, $2)", [
-      ORDER,
-      artistId,
-    ]);
+    // The real `orders` table now exists, so these are its columns, not the
+    // stand-in's. Money is stated explicitly rather than defaulted: a default
+    // of zero on a money column means a future bug creates a free order in
+    // silence.
+    await database.db.query(
+      `insert into orders (id, buyer_id, status, subtotal_agorot, shipping_agorot, total_agorot, commission_rate_bp)
+       values ($1, $2, 'delivered', 0, 0, 0, 1500)`,
+      [ORDER, buyerId],
+    );
+    await database.db.query(
+      `insert into fulfilments (order_id, artist_id, items_subtotal_agorot, shipping_agorot)
+       values ($1, $2, 0, 0)`,
+      [ORDER, artistId],
+    );
 
     const allowed = await sqlOrderEligibility.hasDeliveredOrder(database.db, {
       orderId: ORDER,
