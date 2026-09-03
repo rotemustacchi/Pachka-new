@@ -7,10 +7,23 @@
  * PostgREST gives no way to hold a row lock across statements. The Supabase JS
  * client remains the right tool for auth and storage — see `src/shared/db/supabase.ts`.
  *
- * Because this connects as the database owner, row-level security does not
- * constrain it. RLS is the boundary for the anon/authenticated keys used from
- * the browser; server-side module code is trusted and enforces its own rules.
- * Both layers are required — see `db/README.md`.
+ * Row-level security applies to this connection too. It used to be assumed
+ * otherwise — that the connection role owned the tables or carried BYPASSRLS,
+ * so policies were something only the browser's anon and authenticated keys had
+ * to satisfy. Nothing checked that assumption, and the schema was built on it:
+ * every table had `for select` policies and no write policies at all, so if the
+ * deployed role had turned out not to bypass RLS, every write in the product
+ * would have failed. See ARCHITECTURE.md, "Every table needs write policies",
+ * and docs/security-audit-01.md finding H3.
+ *
+ * So the contract is now explicit rather than incidental: this connects as a
+ * role granted `service_role`, and every server-side write is permitted by a
+ * policy written `to service_role` in `db/migrations`. The suite connects the
+ * same way (`tests/harness/login-roles.ts`), which is what makes a missing
+ * policy a test failure rather than a production outage.
+ *
+ * RLS is still not the only layer. It cannot express rules that span tables, so
+ * server-side checks in module code remain required — see `db/README.md`.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Pool, type PoolClient, type PoolConfig } from "pg";

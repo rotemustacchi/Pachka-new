@@ -21,9 +21,58 @@ That is the whole setup. The integration suite starts its own PostgreSQL.
    is bound, so two runs on one machine cannot collide.
 3. Every migration in `db/migrations` is applied to a database named
    `pachka_template`.
-4. **Each test gets its own database**, cloned with
+4. Two non-superuser login roles are created — see "Which role tests run as".
+5. **Each test gets its own database**, cloned with
    `create database ... template pachka_template`, and dropped afterwards.
-5. At the end of the run the server is stopped and the directory deleted.
+6. At the end of the run the server is stopped and the directory deleted.
+
+Before step 1, the harness also deletes cluster directories left behind by runs
+that were killed. A run that is SIGKILLed never reaches `pg_ctl stop`, so its
+postmaster survives it; sixteen of these once accumulated on one machine and
+starved each other until a single test took 362 seconds, which read as two
+modules having become mysteriously slow. The sweep only ever touches
+`pachka-pg-*` directories whose postmaster is demonstrably gone.
+
+## Which role tests run as
+
+**Not a superuser, and this is load-bearing.** A superuser bypasses row-level
+security before `FORCE ROW LEVEL SECURITY` or `BYPASSRLS` is consulted, so a
+suite running as one cannot tell a working policy from a missing one. This
+suite ran as `postgres` for months while the schema had `for select` policies
+and almost no write policies at all; the day the harness stopped connecting as a
+superuser, 432 of 461 integration tests failed, every one of them a real missing
+policy or grant. ARCHITECTURE.md, "Tests connect as a non-superuser role".
+
+Two roles, because production has two identities:
+
+| Handle | Role | Member of | Stands in for |
+|---|---|---|---|
+| `database.db` | `pachka_test_app` | `service_role` | The server's own connection — `shared/db`, module code |
+| `database.dataApi` | `pachka_test_authenticator` | `anon`, `authenticated` | PostgREST's authenticator, behind `asAnon` / `asUser` |
+
+Keep them apart. Postgres matches a policy's `to <role>` clause by role
+*membership*, so a single role in all three would match the server's policies
+while acting as a browser, and every "an anonymous visitor cannot see this" test
+would start passing for the wrong reason.
+
+If a test fails with `permission denied` or `new row violates row-level
+security policy`, **the fix is a migration, not the harness.** It means the
+table is missing a grant or a write policy, and it would have failed the same
+way in production.
+
+## When a fixture genuinely needs the superuser
+
+`withPrivilegedConnection(database, reason, fn)`, where `reason` is a closed
+union of the uses that have been argued for — applying schema, tampering with
+the audit log as an attacker holding the owner's credentials, granting `admin`
+out of band, and arranging an `app_config` row no application path can produce.
+
+Adding a fifth means adding a union member, which means writing down why, in a
+diff a reviewer sees. Do not reach for it to make a permission error go away:
+that error is the suite working.
+
+`harness-privileges.test.ts` asserts all of the above against `pg_roles`, with
+positive controls, so none of it can quietly stop being true.
 
 Requires the PostgreSQL server binaries (`initdb`, `pg_ctl`) — `brew install
 postgresql@16` on macOS, `apt install postgresql-16` on Debian. The harness

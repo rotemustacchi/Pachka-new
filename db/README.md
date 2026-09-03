@@ -61,10 +61,20 @@ it.** A table shipped without policies is a security defect, not a follow-up.
 ## Two access paths, and why
 
 **`shared/db` (node-postgres, direct connection)** is how module code reads and
-writes. It connects as the database owner, so RLS does not constrain it —
-server-side module code is trusted and enforces the rules itself. This path
-exists because reservation correctness needs `select ... for update` held across
+writes. It connects as a role granted `service_role`, and **RLS constrains it
+too**: every server-side write is permitted by an explicit policy written
+`to service_role`, not by the connection bypassing the check. This path exists
+because reservation correctness needs `select ... for update` held across
 statements inside one transaction, which PostgREST cannot express.
+
+That is a correction, not a restatement. This section used to say the
+connection "connects as the database owner, so RLS does not constrain it",
+which made every write in the product depend on a deployment setting nobody
+verified — and the schema had grown twenty-seven `for select` policies and
+almost no write policies on the strength of it. If the deployed role had not
+bypassed RLS, registration would have failed for every visitor while the test
+suite stayed green. See ARCHITECTURE.md, "Every table needs write policies",
+and docs/security-audit-01.md finding H3.
 
 **`@supabase/supabase-js` (anon / authenticated key)** is how the browser and
 Supabase Auth talk to the database. This path *is* constrained by RLS, and RLS
@@ -73,6 +83,14 @@ policies as though the anon key is public, because it is.
 
 Both layers are required. Server-side checks without RLS leave the anon key
 unguarded; RLS without server-side checks cannot express rules that span tables.
+
+**Writing a migration, therefore:** state the grants to `service_role`
+explicitly, and give every table `for insert`, `for update` and `for delete`
+policies with `with check` for the roles entitled to them. Where a table takes
+no write from some role — and several deliberately take none from any
+application role — say so in a comment. ARCHITECTURE.md treats silence as an
+omission and an explicit comment as a decision, and the integration suite now
+runs as a non-superuser, so an omission is a test failure.
 
 ## Supabase compatibility in tests
 
