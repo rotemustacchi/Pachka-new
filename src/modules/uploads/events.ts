@@ -165,8 +165,16 @@ export async function latestEventForImage(
  *
  * One row per artwork rather than per event: an artist who retries a broken
  * upload five times has one problem, and five queue items for it would bury
- * every other report. `distinct on` takes the newest flagged event per artwork,
- * which is also the one whose note is worth showing.
+ * every other report. `distinct on` takes ONE flagged event per artwork, and
+ * the ordering that picks it is by SEVERITY first and recency second.
+ *
+ * Severity first because a single upload produces several flagged events at
+ * once -- a screening outage costs the analysis half of the same call, so
+ * `screening_unavailable` and `analysis_failed` are written in one transaction
+ * and share a `created_at` to the microsecond. Ordering by time alone would
+ * pick between them arbitrarily, and the moderator would sometimes be told the
+ * classification form was blank when the actual problem is that an unscreened
+ * image is sitting in a draft.
  */
 export async function flaggedUploads(
   sql: Sql,
@@ -181,12 +189,18 @@ export async function flaggedUploads(
   }>(
     `select artwork_id, created_at, event, detail
        from (
-         select distinct on (artwork_id) artwork_id, created_at, event, detail
+         select distinct on (artwork_id)
+                artwork_id, created_at, event, detail,
+                case event
+                  when 'screening_blocked'     then 0
+                  when 'screening_unavailable' then 1
+                  else 2
+                end as severity
            from upload_events
           where event = any($1::text[])
-          order by artwork_id, created_at desc, id desc
+          order by artwork_id, severity, created_at desc, id desc
        ) newest
-      order by created_at desc
+      order by severity, created_at desc
       limit $2`,
     [[...FLAGGED_EVENTS], bounded],
   );
