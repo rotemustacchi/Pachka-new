@@ -21,6 +21,7 @@
  */
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
+import type { Sharp } from "sharp";
 import { describe, expect, it } from "vitest";
 import {
   createDraft,
@@ -54,7 +55,7 @@ import { useTestDatabase } from "../harness";
 
 // ---------------------------------------------------------------------------
 
-function noisyImage(width: number, height: number, seed: number): sharp.Sharp {
+function noisyImage(width: number, height: number, seed: number): Sharp {
   const data = Buffer.alloc(width * height * 3);
   let state = seed >>> 0;
   for (let i = 0; i < data.length; i += 1) {

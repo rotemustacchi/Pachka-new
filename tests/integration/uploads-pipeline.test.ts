@@ -27,6 +27,7 @@
  */
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
+import type { Sharp } from "sharp";
 import { describe, expect, it } from "vitest";
 import {
   createDraft,
@@ -51,6 +52,7 @@ import {
   type VisionAnalyst,
 } from "@/modules/uploads";
 import { setConfig } from "@/shared/config";
+import type { AppError } from "@/shared/errors";
 import type { Database } from "@/shared/db";
 import { useTestDatabase } from "../harness";
 
@@ -67,7 +69,7 @@ import { useTestDatabase } from "../harness";
  * because the threshold was tuned to let it through), and compresses to a file
  * comfortably over the 100 KB minimum without shipping a binary into the repo.
  */
-function noisyImage(width: number, height: number, seed: number): sharp.Sharp {
+function noisyImage(width: number, height: number, seed: number): Sharp {
   const data = Buffer.alloc(width * height * 3);
   let state = seed >>> 0;
   for (let i = 0; i < data.length; i += 1) {
@@ -286,14 +288,20 @@ describe("the local technical gate runs before any paid call", () => {
     const deps = uploadsDeps(database.db, memoryStore(), refusingAnalyst);
     const thresholds = await uploadThresholds(database.db);
 
-    const error = await processUpload(deps, {
-      artistId,
-      artworkId: draft.id,
-      bytes: await undersizedPhotograph(),
-    }).catch((caught: unknown) => caught as { message: string; details: Record<string, unknown> });
+    let error: AppError | null = null;
+    try {
+      await processUpload(deps, {
+        artistId,
+        artworkId: draft.id,
+        bytes: await undersizedPhotograph(),
+      });
+    } catch (caught) {
+      error = caught as AppError;
+    }
 
-    expect(error.message).toContain(String(thresholds.minShorterEdgePx));
-    expect(error.details).toMatchObject({ failure: "resolution", widthPx: 800, heightPx: 800 });
+    expect(error).not.toBeNull();
+    expect(error?.message).toContain(String(thresholds.minShorterEdgePx));
+    expect(error?.details).toMatchObject({ failure: "resolution", widthPx: 800, heightPx: 800 });
   });
 
   it("rejects a blurry image and advises retaking the photograph", async () => {
