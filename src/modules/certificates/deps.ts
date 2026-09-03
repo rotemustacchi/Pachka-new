@@ -103,6 +103,21 @@ export const sqlArtistNames: ArtistNameSource = async (sql, artistId) => {
   return row.display_name;
 };
 
+/**
+ * Where a buyer's name on their own order comes from.
+ *
+ * A port for the same reason `ArtistNameSource` is one, with a sharper edge:
+ * the implementation must be the one that ENFORCES OWNERSHIP, not merely one
+ * that knows the name. `buyerNamesFromOrders()` in `./buyer` is that
+ * implementation and the only one this module ships — it goes through
+ * `orders.buyerOrder()`, whose query is scoped by buyer.
+ *
+ * There is deliberately no default. Unwired, `buyerCertificate()` raises rather
+ * than rendering the private document with the name missing: the mandatory
+ * content would be absent and the page would still look finished.
+ */
+export type BuyerNameSource = (buyerId: string, orderId: string) => Promise<string>;
+
 export interface CertificatesDeps {
   readonly db: Database;
   /**
@@ -112,6 +127,11 @@ export interface CertificatesDeps {
   readonly verificationRateLimit?: VerificationRateLimit;
   /** Omit to accept `sqlArtistNames`. */
   readonly artistNames?: ArtistNameSource;
+  /**
+   * Required to render a buyer's private copy; unused by the public page, which
+   * has no business knowing a buyer exists. See `BuyerNameSource`.
+   */
+  readonly buyerNames?: BuyerNameSource;
 }
 
 /** The limit in force for a call. One place resolves it; see the header. */
