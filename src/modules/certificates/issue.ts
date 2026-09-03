@@ -49,6 +49,7 @@ import type { Sql, Tx } from "@/shared/db";
 import { AppError } from "@/shared/errors";
 import { artistNameSourceFor, type CertificatesDeps } from "./deps";
 import { DECLARATION_VERSION } from "./declaration";
+import { certificateIssuedNotifications, type NotificationRequest } from "./notifications";
 import { newCertificateIdentifier } from "./identifier";
 import {
   CERTIFICATE_COLUMNS,
@@ -164,6 +165,24 @@ export interface IssueCertificatesResult {
   readonly certificates: readonly CertificateRecord[];
   /** How many rows this call actually inserted. Zero on a repeat call. */
   readonly issuedCount: number;
+  /**
+   * The identifiers this call minted, in issue order. Empty on a repeat call.
+   *
+   * Distinct from `certificates` because the emailed link must cover only what
+   * is new: a self-heal on the buyer's third page view must not re-send an
+   * email about a document they already have.
+   */
+  readonly newlyIssued: readonly string[];
+  /**
+   * Dispatch these AFTER the transaction has committed.
+   *
+   * Returned rather than sent, the same contract `orders` and `shipping` use —
+   * "nobody is told about something that then rolled back". Returned from HERE
+   * rather than left for the caller to assemble, because a caller who forgets
+   * produces no error and no email, and the missing certificate notice would
+   * only ever be noticed by the buyer who did not get one.
+   */
+  readonly notifications: readonly NotificationRequest[];
 }
 
 /**
@@ -222,6 +241,7 @@ export async function issueCertificatesForFulfilment(
     const artistDisplayName = await artistNameSourceFor(deps)(tx, fulfilment.artistId);
 
     let issuedCount = 0;
+    const newlyIssued: string[] = [];
 
     for (const item of items) {
       const alreadyIssued = existing.filter((c) => c.artworkId === item.artworkId).length;
@@ -233,8 +253,9 @@ export async function issueCertificatesForFulfilment(
         const isEdition = artwork.inventoryType === "edition";
         const editionPosition = isEdition ? await nextEditionPosition(tx, item.artworkId) : null;
 
+        const identifier = newCertificateIdentifier();
         const inserted = await insertCertificate(tx, {
-          id: newCertificateIdentifier(),
+          id: identifier,
           orderId: order.id,
           fulfilmentId,
           artworkId: item.artworkId,
@@ -266,11 +287,24 @@ export async function issueCertificatesForFulfilment(
           deliveredAt,
         });
 
-        if (inserted) issuedCount += 1;
+        if (inserted) {
+          issuedCount += 1;
+          newlyIssued.push(identifier);
+        }
       }
     }
 
-    return { certificates: await certificatesForFulfilment(tx, fulfilmentId), issuedCount };
+    return {
+      certificates: await certificatesForFulfilment(tx, fulfilmentId),
+      issuedCount,
+      newlyIssued,
+      notifications: certificateIssuedNotifications({
+        buyerId: order.buyerId,
+        orderId: order.id,
+        fulfilmentId,
+        identifiers: newlyIssued,
+      }),
+    };
   });
 }
 

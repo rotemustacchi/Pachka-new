@@ -33,6 +33,7 @@ import {
   AI_ASSISTANCE_STATEMENT,
   DECLARATION_VERSION,
   UNIQUE_WORK_STATEMENT,
+  CERTIFICATE_TEMPLATES,
   certificatesForFulfilment,
   issueCertificatesForFulfilment,
   orderCertificates,
@@ -537,5 +538,68 @@ describe("an issued certificate is immutable", () => {
     expect(row.tgname).toBe("certificates_immutable");
     expect(row.on_update).toBe(true);
     expect(row.on_delete).toBe(true);
+  });
+});
+
+describe("telling the buyer their certificate is ready", () => {
+  const database = useTestDatabase();
+
+  it("returns one buyer notification carrying the identifiers, and sends nothing itself", async () => {
+    // `authenticity-certificate`: the certificate is available "from their order
+    // view and by emailed link". The message is RETURNED, not sent — the same
+    // contract `orders` and `shipping` use, so nobody is emailed about a
+    // transaction that then rolled back.
+    const artistId = await seedArtist(database.db, "יעל שוורץ");
+    const buyerId = await seedBuyer(database.db, "דנה כהן");
+    const first = await publishFor(database, artistId, { title: "קו החוף, שקיעה" });
+    const second = await publishFor(database, artistId, { title: "רוח מזרחית" });
+
+    const sale = await placeAndPay(
+      database,
+      [{ artworkId: first }, { artworkId: second }],
+      buyerId,
+      artistId,
+    );
+    await deliverAll(database, sale);
+
+    const issued = await issueCertificatesForFulfilment(certsDeps(database), sale.fulfilmentIds[0]!);
+
+    // One message for the parcel, not one per certificate: two emails about one
+    // delivery is how a marketplace teaches people to ignore its mail.
+    expect(issued.notifications).toHaveLength(1);
+    expect(issued.notifications[0]).toMatchObject({
+      audience: "buyer",
+      template: CERTIFICATE_TEMPLATES.certificateIssued,
+      recipientId: buyerId,
+    });
+    expect(issued.notifications[0]!.data.identifiers).toEqual(issued.newlyIssued);
+    expect(issued.newlyIssued).toHaveLength(2);
+
+    // No buyer name and no assembled URL in the payload. The mail layer resolves
+    // the address from `recipientId` and builds the link from the identifier —
+    // a template handed a finished URL is one that can be pointed elsewhere by
+    // whatever built it.
+    const payload = JSON.stringify(issued.notifications[0]!.data);
+    expect(payload).not.toContain("דנה כהן");
+    expect(payload).not.toContain("http");
+  });
+
+  it("says nothing on a repeat call, so a self-heal does not re-email the buyer", async () => {
+    // `orderCertificates()` issues anything a delivered fulfilment is owed on
+    // every page view. Without this, opening the order twice would send two
+    // emails about the same document.
+    const artistId = await seedArtist(database.db, "יעל שוורץ");
+    const buyerId = await seedBuyer(database.db, "דנה כהן");
+    const artworkId = await publishFor(database, artistId);
+    const sale = await placeAndPay(database, [{ artworkId }], buyerId, artistId);
+    await deliverAll(database, sale);
+
+    await issueCertificatesForFulfilment(certsDeps(database), sale.fulfilmentIds[0]!);
+    const again = await issueCertificatesForFulfilment(certsDeps(database), sale.fulfilmentIds[0]!);
+
+    expect(again.newlyIssued).toEqual([]);
+    expect(again.notifications).toEqual([]);
+    // The certificate is still there and still readable — silence, not absence.
+    expect(again.certificates).toHaveLength(1);
   });
 });
