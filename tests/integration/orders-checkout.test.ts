@@ -23,6 +23,7 @@ import {
   beginCheckout,
   checkoutableLines,
   createManualPaymentProvider,
+  previewCheckout,
   revalidateCart,
   validateDelivery,
   type OrdersDeps,
@@ -480,5 +481,84 @@ describe("checkout request shape", () => {
       "select count(*)::text as count from reservations",
     );
     expect(holds.count).toBe("0");
+  });
+});
+
+describe("the cost breakdown before confirming", () => {
+  const database = useTestDatabase();
+
+  it("shows item prices, shipping and total in ILS without reserving anything", async () => {
+    // `checkout-orders`, *Cost breakdown before confirmation*: "the system
+    // displays item prices, shipping cost, and the total in ILS before any
+    // payment action". The second assertion is the one that makes this function
+    // worth having: a preview that reserved would let any browsing visitor take
+    // the catalog off the market just by asking what postage costs.
+    const deps = ordersDeps(database);
+    const yael = await seedArtist(database.db, "יעל");
+    const noa = await seedArtist(database.db, "נועה");
+
+    const preview = await previewCheckout(deps, {
+      lines: [
+        { artworkId: await publishFor(database, yael, CANVAS) },
+        { artworkId: await publishFor(database, noa, PRINT) },
+      ],
+      delivery: DELIVERY,
+    });
+
+    expect(preview.subtotalAgorot).toBe(125_000 + 24_000);
+    expect(preview.shippingAgorot).toBe(LARGE_TIER_CENTER_AGOROT + SMALL_TIER_CENTER_AGOROT);
+    expect(preview.totalAgorot).toBe(125_000 + 24_000 + LARGE_TIER_CENTER_AGOROT + SMALL_TIER_CENTER_AGOROT);
+    expect(preview.currency).toBe("ILS");
+    expect(preview.parcelCount).toBe(2);
+    expect(preview.zoneCode).toBe("center");
+
+    const holds = await database.db.one<{ count: string }>(
+      "select count(*)::text as count from reservations",
+    );
+    const orders = await database.db.one<{ count: string }>(
+      "select count(*)::text as count from orders",
+    );
+    expect([holds.count, orders.count]).toEqual(["0", "0"]);
+  });
+
+  it("agrees exactly with what the checkout then charges", async () => {
+    // The preview's total is what the client sends back as
+    // `displayedTotalAgorot`. If the two derivations could disagree, that
+    // integrity check would reject every honest buyer.
+    const deps = ordersDeps(database);
+    const artistId = await seedArtist(database.db, "יעל");
+    const buyerId = await seedBuyer(database.db);
+    const artworkId = await publishFor(database, artistId, CANVAS);
+
+    const preview = await previewCheckout(deps, {
+      lines: [{ artworkId }],
+      delivery: DELIVERY,
+    });
+
+    const result = await beginCheckout(deps, {
+      buyerId,
+      lines: [{ artworkId }],
+      delivery: DELIVERY,
+      displayedTotalAgorot: preview.totalAgorot,
+    });
+
+    expect(result.order.subtotalAgorot).toBe(preview.subtotalAgorot);
+    expect(result.order.shippingAgorot).toBe(preview.shippingAgorot);
+    expect(result.order.totalAgorot).toBe(preview.totalAgorot);
+  });
+
+  it("blocks the preview on incomplete delivery details, naming the fields", async () => {
+    // `checkout-orders`, *Incomplete delivery details*. Caught at the preview
+    // too, so the buyer is told before they get as far as confirming.
+    const deps = ordersDeps(database);
+    const artistId = await seedArtist(database.db, "יעל");
+    const artworkId = await publishFor(database, artistId, CANVAS);
+
+    await expect(
+      previewCheckout(deps, {
+        lines: [{ artworkId }],
+        delivery: { ...DELIVERY, phone: "", city: "" },
+      }),
+    ).rejects.toMatchObject({ kind: "validation", code: "orders.delivery_incomplete" });
   });
 });

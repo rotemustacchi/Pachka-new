@@ -52,7 +52,10 @@ import { assertEmailVerified } from "@/modules/accounts";
 import {
   lockArtworkForUpdate,
   reconcileAvailability,
+  toArtwork,
+  ARTWORK_COLUMNS,
   type Artwork,
+  type ArtworkRow,
 } from "@/modules/artworks";
 import { classifyPackage, quoteShipping, type QuoteLine, type ShippingQuote } from "@/modules/shipping";
 import { commissionRateBp } from "./config";
@@ -142,6 +145,29 @@ export interface CheckoutResult {
    * `shipping`: nobody is told about something that then rolled back.
    */
   readonly notifications: readonly NotificationRequest[];
+}
+
+/** One priced line of a preview. No reservation exists for any of these. */
+export interface CheckoutPreviewLine {
+  readonly artworkId: string;
+  readonly artistId: string;
+  readonly title: string | null;
+  readonly quantity: number;
+  readonly unitPriceAgorot: Agorot;
+  readonly lineTotalAgorot: Agorot;
+}
+
+/** The breakdown a buyer sees before confirming. Every figure derived server-side. */
+export interface CheckoutPreview {
+  readonly lines: readonly CheckoutPreviewLine[];
+  readonly subtotalAgorot: Agorot;
+  readonly shippingAgorot: Agorot;
+  readonly totalAgorot: Agorot;
+  readonly currency: string;
+  readonly zoneCode: string;
+  readonly zoneDisplayName: string;
+  /** How many parcels this will ship as — one per artist. */
+  readonly parcelCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +337,112 @@ function parcelFor(artwork: Artwork, packedDepthMm: number) {
     widthMm: artwork.widthMm,
     heightMm: artwork.depthMm ?? packedDepthMm,
     weightGrams: artwork.weightGrams,
+  };
+}
+
+/**
+ * The cost breakdown, WITHOUT reserving anything.
+ *
+ * `checkout-orders`, "Checkout collects delivery and contact details": the
+ * system "SHALL present a full cost breakdown of item prices, shipping, and
+ * total in ILS before the buyer confirms", and the scenario is emphatic that it
+ * happens "before any payment action".
+ *
+ * `revalidateCart` cannot answer that on its own, because shipping is not
+ * knowable until there is an address: the zone comes from the city and the tier
+ * from the artworks. And `beginCheckout` answers it only by taking the
+ * inventory first, which is the wrong order — a buyer who wanted to see the
+ * postage before deciding would have had to hold the piece to find out, and a
+ * buyer who then walked away would have taken it off the market for the whole
+ * TTL. That is SECURITY.md S1-17's inventory hostage, handed to every browsing
+ * visitor as a feature.
+ *
+ * So this is the same derivation, read-only:
+ *
+ *   • no `FOR UPDATE`, no transaction, no reservation row;
+ *   • prices and tiers still read SERVER-SIDE from the artwork rows, so the
+ *     preview cannot be talked into quoting a cheaper zone or a smaller parcel
+ *     than the real thing will (SECURITY.md S0-5 item 4);
+ *   • the total it returns is exactly what `beginCheckout` will derive, which is
+ *     what makes it usable as the `displayedTotalAgorot` integrity check —
+ *     a figure that changed in between aborts the checkout instead of
+ *     surprising the buyer.
+ *
+ * It is a quote, not a promise. Between this call and the confirm, the piece can
+ * sell and the price can move; both are caught under the lock, where they must
+ * be.
+ */
+export async function previewCheckout(
+  deps: OrdersDeps,
+  request: Omit<CheckoutRequest, "buyerId"> & { readonly buyerId?: string },
+): Promise<CheckoutPreview> {
+  const delivery = validateDelivery(request.delivery);
+  const lines = normaliseLines(request.lines);
+  const packedDepthMm = packedDepthMmFor(deps);
+
+  const priced: Array<{ artwork: Artwork; quantity: number; unitPriceAgorot: Agorot; lineTotalAgorot: Agorot }> = [];
+  const quoteLines: QuoteLine[] = [];
+
+  for (const line of lines) {
+    const row = await deps.db.maybeOne<ArtworkRow>(
+      `select ${ARTWORK_COLUMNS} from artworks where id = $1`,
+      [line.artworkId],
+    );
+    if (row === null) {
+      throw AppError.notFound("Artwork not found", {
+        code: "orders.artwork_not_found",
+        details: { artworkId: line.artworkId },
+      });
+    }
+
+    const artwork = toArtwork(row);
+    const unitPriceAgorot = priceOf(artwork);
+    const classification = await classifyPackage(deps.db, parcelFor(artwork, packedDepthMm));
+
+    priced.push({
+      artwork,
+      quantity: line.quantity,
+      unitPriceAgorot,
+      lineTotalAgorot: multiplyAgorot(unitPriceAgorot, line.quantity),
+    });
+    quoteLines.push({
+      artworkId: artwork.id,
+      artistId: artwork.artistId,
+      sizeTierCode: classification.tierCode,
+      requiresShippingQuote: classification.requiresShippingQuote,
+    });
+  }
+
+  const subtotalAgorot = priced.reduce(
+    (sum, line) => addAgorot(sum, line.lineTotalAgorot),
+    zeroAgorot,
+  );
+
+  const quote = await quoteShipping(deps.db, {
+    address: {
+      countryCode: delivery.countryCode,
+      city: delivery.city,
+      postalCode: delivery.postalCode,
+    },
+    lines: quoteLines,
+  });
+
+  return {
+    lines: priced.map((line) => ({
+      artworkId: line.artwork.id,
+      artistId: line.artwork.artistId,
+      title: line.artwork.title,
+      quantity: line.quantity,
+      unitPriceAgorot: line.unitPriceAgorot,
+      lineTotalAgorot: line.lineTotalAgorot,
+    })),
+    subtotalAgorot,
+    shippingAgorot: quote.totalAgorot,
+    totalAgorot: addAgorot(subtotalAgorot, quote.totalAgorot),
+    currency: "ILS",
+    zoneCode: quote.zoneCode,
+    zoneDisplayName: quote.zoneDisplayName,
+    parcelCount: quote.fulfilments.length,
   };
 }
 

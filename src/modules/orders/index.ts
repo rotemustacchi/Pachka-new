@@ -156,8 +156,11 @@ export {
 // ---- Checkout. One transaction, prices read under the lock.
 export {
   beginCheckout,
+  previewCheckout,
   validateDelivery,
   type CheckoutLine,
+  type CheckoutPreview,
+  type CheckoutPreviewLine,
   type CheckoutRequest,
   type CheckoutResult,
   type DeliveryInput,
