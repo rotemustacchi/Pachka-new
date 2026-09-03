@@ -377,6 +377,54 @@ describe("an artwork with no embedding", () => {
   });
 });
 
+describe("the description the vector is computed from", () => {
+  const database = useTestDatabase();
+
+  it("carries no contact details into artwork_embeddings", async () => {
+    // SECURITY.md S2-19, verbatim: "Feed a vision-client fake that returns a
+    // description containing `call me on 0501234567`. Assert the stored
+    // `artwork_embeddings` description ... contain neither the digits nor a
+    // normalised form of them."
+    //
+    // The model will faithfully transcribe a phone number painted onto the
+    // canvas, and the description is a channel around the contact scanner if it
+    // is allowed to skip it.
+    const leaking: VisionAnalyst = {
+      async analyse() {
+        return {
+          safety: { verdict: "safe", confidence: 0.01, categories: [] },
+          medium: "painting_illustration",
+          styles: ["minimalist"],
+          moods: ["calm"],
+          targetSpaces: ["living_room"],
+          dominantColours: [],
+          description: "ציור נוף. call me on 0501234567 for a better price.",
+        };
+      },
+    };
+
+    const deps: UploadsDeps = { ...uploadsDeps(database.db, countingEmbedder()), vision: leaking };
+    const { artistId, artworkId } = await draftWithImage(database.db, deps);
+    await publishArtwork(deps, artistId, artworkId);
+
+    const stored = await embeddingFor(database.db, artworkId);
+    expect(stored?.description ?? "").not.toContain("0501234567");
+    expect(stored?.description ?? "").not.toMatch(/\d{7,}/);
+  });
+
+  it("POSITIVE CONTROL: a clean description does reach the stored embedding", async () => {
+    // Otherwise the assertion above could pass because no description ever
+    // makes it into the row.
+    const deps = uploadsDeps(database.db, countingEmbedder());
+    const { artistId, artworkId } = await draftWithImage(database.db, deps);
+    await publishArtwork(deps, artistId, artworkId);
+
+    expect(await embeddingFor(database.db, artworkId)).toMatchObject({
+      description: "ציור אקריליק בגוונים כחולים, שכבות דקות וקו אופק ברור.",
+    });
+  });
+});
+
 describe("the vector column and the code agree about its width", () => {
   const database = useTestDatabase();
 

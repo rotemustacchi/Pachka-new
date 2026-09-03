@@ -53,6 +53,39 @@ import {
   type Style,
   type TargetSpace,
 } from "@/modules/artworks";
+// ---------------------------------------------------------------------------
+// AN EDGE THAT IS NOT IN ARCHITECTURE.md's DEPENDENCY TABLE. RAISED, NOT HIDDEN.
+// ---------------------------------------------------------------------------
+//
+// The table gives `uploads` exactly one outgoing edge, to `artworks`. This
+// import adds a second, to `accounts`, and ARCHITECTURE.md says to raise such a
+// need rather than to add the import. It is here anyway, deliberately visible
+// rather than worked around, because the two binding documents genuinely
+// disagree and removing it would resolve the disagreement by dropping a
+// security control:
+//
+//   SECURITY.md S2-19, under "Tests": "Feed a vision-client fake that returns a
+//   description containing `call me on 0501234567`. Assert the STORED
+//   `artwork_embeddings` description and the rendered artwork page contain
+//   neither the digits nor a normalised form of them."
+//
+// `artwork_embeddings` is this module's table, so nobody else can satisfy that
+// sentence, and the scanner lives in `accounts` (as `artworks/listings.ts` says
+// in its own comment on the same control). Duplicating the scanner here would
+// be worse than the edge: S2-19 item 4 has the pattern set versioned and
+// backfilled, and a second copy would drift from it on the first update.
+//
+// TWO CLEAN RESOLUTIONS, FOR THE LEAD ARCHITECT TO PICK:
+//
+//   1. Have `artworks` re-export `scanForContactDetails` and `explainFindings`.
+//      `artworks` already imports both, `uploads -> artworks` is a permitted
+//      edge, and the dependency table needs no change at all. Three lines in
+//      `artworks/index.ts`.
+//   2. Add `accounts` to the `uploads` row of the table, as `moderation`
+//      already has it.
+//
+// Until one lands, this import is the conflict, stated where a reviewer reading
+// the file will find it.
 import { scanForContactDetails } from "@/modules/accounts";
 import type { Sql } from "@/shared/db";
 import type { VisionAnalyst, VisionRequest } from "./ports";
