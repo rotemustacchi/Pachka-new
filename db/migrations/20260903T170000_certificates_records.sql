@@ -2,6 +2,10 @@
 -- certificates — the Certificate of Authenticity, and the counter that stops
 -- its identifier space being walked.
 --
+-- Owner: certificates
+--
+-- Forward-only and additive: see db/README.md. No down migration exists.
+--
 -- Two tables: `certificates`, one row per artwork UNIT sold and delivered, and
 -- `certificate_verification_events`, the per-IP attempt counter behind the
 -- public verification endpoint.
