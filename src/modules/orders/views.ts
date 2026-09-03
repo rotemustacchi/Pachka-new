@@ -88,7 +88,7 @@ export interface BuyerParcel {
   readonly items: readonly OrderItem[];
 }
 
-export interface BuyerOrderView {
+export interface BuyerOrderDetail {
   readonly order: Order;
   /** The buyer's own address back to them. Their data, so no gate. */
   readonly delivery: DeliveryDetails;
@@ -116,7 +116,7 @@ export async function buyerOrder(
   deps: OrdersDeps,
   buyerId: string,
   orderId: string,
-): Promise<BuyerOrderView> {
+): Promise<BuyerOrderDetail> {
   const orderRow = await deps.db.maybeOne<OrderRow>(
     `select ${ORDER_COLUMNS} from orders where id = $1 and buyer_id = $2`,
     [orderId, buyerId],
@@ -203,7 +203,7 @@ const DISCLOSING_STATES: ReadonlySet<Fulfilment["status"]> = new Set([
   "returned",
 ]);
 
-export interface ArtistFulfilmentView {
+export interface ArtistFulfilmentDetail {
   readonly fulfilment: Fulfilment;
   /** Only this artist's lines. Another artist's prices are not theirs to read. */
   readonly items: readonly OrderItem[];
@@ -234,7 +234,7 @@ export async function artistFulfilment(
   deps: OrdersDeps,
   artistId: string,
   fulfilmentId: string,
-): Promise<ArtistFulfilmentView> {
+): Promise<ArtistFulfilmentDetail> {
   const row = await deps.db.maybeOne<FulfilmentRow>(
     `select ${FULFILMENT_COLUMNS} from fulfilments where id = $1 and artist_id = $2`,
     [fulfilmentId, artistId],

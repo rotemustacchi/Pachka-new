@@ -194,8 +194,8 @@ export {
   buyerOrder,
   listArtistFulfilments,
   listBuyerOrders,
-  type ArtistFulfilmentView,
-  type BuyerOrderView,
+  type ArtistFulfilmentDetail,
+  type BuyerOrderDetail,
   type BuyerParcel,
 } from "./views";
 
@@ -214,3 +214,21 @@ export {
 
 // ---- Configuration this module reads.
 export { commissionRateBp, reservationTtlMinutes } from "./config";
+
+// ---- The two screens. Built on `shared/ui` primitives, so the card, the chip
+// and the heading are the approved treatments rather than second copies.
+//
+// Neither component decides who may see what. `views.ts` withholds the buyer's
+// details until the fulfilment is paid, and these render what they are handed —
+// a component that made the call itself would be one `&&` away from leaking a
+// stranger's home address, and the mistake would be invisible in review.
+export { ArtistFulfilmentView, type ArtistFulfilmentViewProps } from "./ui/ArtistFulfilmentView";
+export { BuyerOrderView, type BuyerOrderViewProps } from "./ui/BuyerOrderView";
+export { StatusBadge, type StatusBadgeProps } from "./ui/StatusBadge";
+export {
+  artistStatusTone,
+  buyerStatusTone,
+  ARTIST_STATUS_LABELS,
+  BUYER_STATUS_LABELS,
+  type StatusTone,
+} from "./ui/status";
