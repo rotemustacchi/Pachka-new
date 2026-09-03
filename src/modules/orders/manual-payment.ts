@@ -20,6 +20,22 @@
  * ask. `getStatus` below therefore reports what this adapter was told through
  * its own methods, and `payments.ts` never consults it to decide anything.
  *
+ * WHY THIS ADAPTER HOLDS NO STATE
+ * ------------------------------
+ * An earlier draft kept an in-process map of references so `getStatus` could
+ * answer from memory. That is wrong in the deployment PACHKA actually has.
+ * Vercel runs many short-lived lambdas (see `shared/db/instance.ts`), so the
+ * instance that authorises a payment in March is not the instance an operator
+ * confirms it from in April — the map would be empty and `capture` would refuse
+ * a payment that had genuinely arrived. It also fails across an ordinary
+ * restart, and the integration suite caught it immediately by constructing the
+ * provider twice.
+ *
+ * So there is no map. The `payments` table is the record — it always was, and
+ * the map was a second one that could disagree with it. `capture` and `refund`
+ * record what the operator saw; there is no external ledger to check them
+ * against, because the external ledger is a bank statement and a human.
+ *
  * WHY THIS IS A REAL IMPLEMENTATION AND NOT A TEST DOUBLE
  * ------------------------------------------------------
  * ARCHITECTURE.md's test policy allows a deterministic fake for payment,
@@ -28,11 +44,6 @@
  * the integration tests drive the same object production does. A fake would be
  * a second implementation of an interface with one, and every assertion made
  * against it would be an assertion about the fake.
- *
- * The in-process map exists so `getStatus` can answer honestly. It is a cache of
- * this adapter's own calls, not a store of record — a fresh process starts empty
- * and `payments.ts` neither reads nor needs it, which is why losing it costs
- * nothing.
  */
 import { randomUUID } from "node:crypto";
 import { AppError } from "@/shared/errors";
@@ -63,33 +74,18 @@ export interface ManualPaymentProviderOptions {
   readonly newReference?: () => string;
 }
 
-interface ManualPayment {
-  status: PaymentOutcome["status"];
-  amountAgorot: Agorot;
-}
-
 export function createManualPaymentProvider(
   options: ManualPaymentProviderOptions = {},
 ): PaymentProvider {
   const newReference = options.newReference ?? (() => `manual-${randomUUID()}`);
-  const known = new Map<string, ManualPayment>();
 
-  const remember = (reference: string, payment: ManualPayment): void => {
-    known.set(reference, payment);
-  };
-
-  const requirePayment = (reference: string): ManualPayment => {
-    const payment = known.get(reference);
-    if (!payment) {
-      // Not `not_found`: from the caller's point of view the payment company is
-      // an external system that has lost track of a reference we hold, which is
-      // an integration failure rather than a missing PACHKA resource.
-      throw AppError.externalFailure(
-        `The manual payment adapter has no record of reference "${reference}".`,
-        { code: "orders.payment_reference_unknown", details: { reference } },
-      );
+  const assertAmount = (amountAgorot: Agorot, verb: string): void => {
+    if (amountAgorot < 0) {
+      throw AppError.validation(`Cannot ${verb} a negative amount (${amountAgorot} agorot).`, {
+        code: "orders.negative_payment_amount",
+        details: { amountAgorot },
+      });
     }
-    return payment;
   };
 
   return {
@@ -101,82 +97,53 @@ export function createManualPaymentProvider(
      * PACHKA payment vocabulary.
      */
     async authorize(request: AuthorizeRequest): Promise<PaymentOutcome> {
-      const reference = newReference();
-      remember(reference, { status: "pending", amountAgorot: request.amountAgorot });
-      return { reference, status: "pending", instructions: INSTRUCTIONS };
+      assertAmount(request.amountAgorot, "authorise");
+      return { reference: newReference(), status: "pending", instructions: INSTRUCTIONS };
     },
 
     /**
      * The operator has seen the transfer land.
      *
-     * Refuses to capture more than was authorised. With a real provider that
-     * refusal comes back over the wire; here nothing would stop it, so the
-     * adapter stops it — an operator who fat-fingers an extra digit should get
-     * an error, not a captured payment for the wrong amount.
+     * Unconditional, and idempotent because of it: there is no payment company
+     * to ask and no authorisation hold to release, so the operator's assertion
+     * that the money arrived is the whole of the event. Whether the order was in
+     * a state to be captured is `payments.ts`'s question, decided against the
+     * `payments` row under the order lock — not this adapter's, which would be
+     * answering it from a second copy of the truth.
      */
     async capture(reference: string, amountAgorot: Agorot): Promise<PaymentOutcome> {
-      const payment = requirePayment(reference);
-
-      if (payment.status === "captured") {
-        // Idempotent on purpose. An operator who clicks twice, or a retried
-        // request, must not produce a second capture — and must not produce an
-        // error that reads like the first one failed.
-        return { reference, status: "captured" };
-      }
-      if (payment.status !== "pending") {
-        throw AppError.conflict(
-          `A payment that is "${payment.status}" cannot be captured.`,
-          { code: "orders.payment_not_capturable", details: { reference, status: payment.status } },
-        );
-      }
-      if (amountAgorot > payment.amountAgorot) {
-        throw AppError.validation(
-          `Cannot capture ${amountAgorot} agorot against an authorisation for ${payment.amountAgorot}.`,
-          {
-            code: "orders.capture_exceeds_authorisation",
-            details: { reference, authorised: payment.amountAgorot, requested: amountAgorot },
-          },
-        );
-      }
-
-      payment.status = "captured";
+      assertAmount(amountAgorot, "capture");
       return { reference, status: "captured" };
     },
 
-    /**
-     * Give the money back. In the manual world this is the operator making a
-     * transfer in the other direction; the row is what says it is owed.
-     */
+    /** Give the money back. In the manual world, a transfer in the other direction. */
     async refund(reference: string, amountAgorot: Agorot): Promise<PaymentOutcome> {
-      const payment = requirePayment(reference);
-
-      if (payment.status !== "captured" && payment.status !== "refunded") {
-        throw AppError.conflict(
-          `A payment that is "${payment.status}" has taken no money and cannot be refunded.`,
-          { code: "orders.payment_not_refundable", details: { reference, status: payment.status } },
-        );
-      }
-      if (amountAgorot > payment.amountAgorot) {
-        throw AppError.validation(
-          `Cannot refund ${amountAgorot} agorot against a payment of ${payment.amountAgorot}.`,
-          {
-            code: "orders.refund_exceeds_payment",
-            details: { reference, paid: payment.amountAgorot, requested: amountAgorot },
-          },
-        );
-      }
-
-      payment.status = "refunded";
+      assertAmount(amountAgorot, "refund");
       return { reference, status: "refunded" };
     },
 
+    /**
+     * There is no external system to ask, and saying so is the honest answer.
+     *
+     * A real adapter reconciles against the provider here — a webhook that never
+     * arrived, an operator wondering why an order is stuck. The manual adapter
+     * has a bank statement and a person instead, and the `payments` table is
+     * where what they concluded is written down. Returning `pending` would be a
+     * plausible-looking lie about every payment an operator had already
+     * confirmed, and a caller that believed it would un-pay real orders.
+     *
+     * `payments.ts` never calls this. It is here because the interface has it
+     * and a real provider will need it.
+     */
     async getStatus(reference: string): Promise<PaymentOutcome> {
-      const payment = requirePayment(reference);
-      return { reference, status: payment.status };
+      throw AppError.externalFailure(
+        "The manual payment adapter has no external ledger to query. " +
+          "The `payments` table is the record of what the operator confirmed.",
+        { code: "orders.manual_status_unavailable", details: { reference } },
+      );
     },
   };
 }
-
 /**
  * The manual adapter's payment instructions, for the order-placed email.
  *

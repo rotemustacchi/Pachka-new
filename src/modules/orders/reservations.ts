@@ -138,17 +138,19 @@ export interface HoldRequest {
 export async function holdUnits(tx: Tx, request: HoldRequest): Promise<Reservation[]> {
   const { artwork, buyerId, orderId, quantity, expiresAt } = request;
 
-  // An artwork that is not published cannot be bought, whatever its stock says.
-  // `sold`, `unlisted`, `draft` and `removed` all land here — and `removed` is
-  // terminal for every role (ARCHITECTURE.md), so it is not-found rather than a
-  // conflict the buyer could wait out.
+  // A draft was never offered and a removed artwork is gone for good —
+  // `removed` is terminal for every role (ARCHITECTURE.md) and catalog-browse
+  // requires it to read as not-found, so neither is a conflict a buyer could
+  // wait out.
   if (artwork.status === "removed" || artwork.status === "draft") {
     throw AppError.notFound("Artwork not found", {
       code: "orders.artwork_not_found",
       details: { artworkId: artwork.id },
     });
   }
-  if (artwork.status !== "published") {
+
+  // `unlisted` is the artist's own withdrawal, and no arithmetic overrides it.
+  if (artwork.status === "unlisted") {
     throw AppError.conflict("This piece is no longer available.", {
       code: "orders.artwork_unavailable",
       details: { artworkId: artwork.id, status: artwork.status },
@@ -158,6 +160,23 @@ export async function holdUnits(tx: Tx, request: HoldRequest): Promise<Reservati
   // Expired holds first, so their ordinals are free and the derivation below
   // counts what is genuinely outstanding.
   await releaseExpiredHolds(tx, artwork.id);
+
+  // `sold` is NOT refused here, and that is deliberate rather than an
+  // oversight. ARCHITECTURE.md: availability is DERIVED; `status = 'sold'` is a
+  // cache of that derivation which `reconcileAvailability` maintains, and the
+  // artworks migration says so — "It is recomputed from derived availability by
+  // artworks.reconcileAvailability(), never incremented."
+  //
+  // Between a hold lapsing and the sweep reaching it, an artwork sits in `sold`
+  // with a unit genuinely free. Refusing on the cached status there would make
+  // purchasability depend on a background job having run, which is SECURITY.md
+  // S1-17's inventory hostage arriving by accident: a stalled sweep would take
+  // the catalog off the market. So the derivation below decides, and the
+  // caller's `reconcileAvailability` moves the status back afterwards.
+  //
+  // The safety of this rests entirely on the derivation being right, which is
+  // why it happens under the row lock and why the unique index on
+  // (artwork_id, unit_index) stands behind it.
 
   // DERIVED, under the lock, on this transaction's connection. Passing `tx`
   // rather than a pool handle is load-bearing: a demand figure read on a second

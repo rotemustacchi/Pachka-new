@@ -33,7 +33,7 @@
  */
 import { AppError } from "@/shared/errors";
 import type { Database, Tx } from "@/shared/db";
-import { aggregateStatus, assertTransition } from "./state-machine";
+import { aggregateStatus, assertTransition, isPermittedEdge, permittedTransitions } from "./state-machine";
 import {
   FULFILMENT_COLUMNS,
   ORDER_COLUMNS,
@@ -132,44 +132,80 @@ export async function transition(
 ): Promise<TransitionResult> {
   assertActorIdentified(request);
 
-  const run = async (handle: Tx): Promise<TransitionResult> => {
-    const current = await handle.maybeOne<OrderRow>(
-      `select ${ORDER_COLUMNS} from orders where id = $1 for update`,
-      [request.orderId],
-    );
-    if (current === null) {
-      throw AppError.notFound("Order not found", {
-        code: "orders.not_found",
-        details: { orderId: request.orderId },
-      });
-    }
-
-    const from = current.status as OrderStatus;
-
-    // Throws before anything is written. `checkout-orders`, "Invalid transition
-    // rejected": "the system rejects the transition and leaves the order
-    // unchanged" — and nothing above this line has changed anything.
-    assertTransition({ from, to: request.to, by: request.actorKind });
-
-    const updated = await handle.one<OrderRow>(
-      `update orders set status = $2 where id = $1 returning ${ORDER_COLUMNS}`,
-      [request.orderId, request.to],
-    );
-
-    const record = await writeTransition(handle, {
-      orderId: request.orderId,
-      fulfilmentId: null,
-      from,
-      to: request.to,
-      actorId: request.actorId,
-      actorKind: request.actorKind,
-      reason: request.reason ?? null,
-    });
-
-    return { order: toOrder(updated), record };
-  };
-
+  const run = (handle: Tx): Promise<TransitionResult> => moveOrder(handle, request, true);
   return tx ? run(tx) : db.withTransaction(run);
+}
+
+/**
+ * The move itself, shared by the authorised path and the derived one.
+ *
+ * `checkActor` is the only difference between them, and it is a real
+ * distinction rather than a flag to skip validation:
+ *
+ *   • `transition()` is somebody DOING something, so both halves are checked —
+ *     is this edge in the machine, and may this actor take it?
+ *   • `syncOrderToFulfilments` is arithmetic over moves that were ALREADY
+ *     authorised at the fulfilment level. Re-asking "may a system move an order
+ *     from paid to shipped" is asking the wrong question about a move nobody
+ *     performed: the artist performed it, on their fulfilment, and was checked
+ *     there. Refusing here would have made the second artist's dispatch fail
+ *     because the order had caught up with it.
+ *
+ * The EDGE is still validated on both paths. A derived move that the state
+ * machine does not contain is a bug in the aggregate rule, not a permission
+ * question, and it never writes a row.
+ */
+async function moveOrder(
+  handle: Tx,
+  request: TransitionRequest,
+  checkActor: boolean,
+): Promise<TransitionResult> {
+  const current = await handle.maybeOne<OrderRow>(
+    `select ${ORDER_COLUMNS} from orders where id = $1 for update`,
+    [request.orderId],
+  );
+  if (current === null) {
+    throw AppError.notFound("Order not found", {
+      code: "orders.not_found",
+      details: { orderId: request.orderId },
+    });
+  }
+
+  const from = current.status as OrderStatus;
+
+  // Throws before anything is written. `checkout-orders`, "Invalid transition
+  // rejected": "the system rejects the transition and leaves the order
+  // unchanged" — and nothing above this line has changed anything.
+  if (checkActor) {
+    assertTransition({ from, to: request.to, by: request.actorKind });
+  } else if (!isPermittedEdge(from, request.to)) {
+    throw AppError.conflict(
+      `An order cannot move from "${from}" to "${request.to}". Permitted: ${
+        permittedTransitions(from).join(", ") || "none"
+      }.`,
+      {
+        code: "orders.invalid_transition",
+        details: { from, to: request.to, permitted: permittedTransitions(from) },
+      },
+    );
+  }
+
+  const updated = await handle.one<OrderRow>(
+    `update orders set status = $2 where id = $1 returning ${ORDER_COLUMNS}`,
+    [request.orderId, request.to],
+  );
+
+  const record = await writeTransition(handle, {
+    orderId: request.orderId,
+    fulfilmentId: null,
+    from,
+    to: request.to,
+    actorId: request.actorId,
+    actorKind: request.actorKind,
+    reason: request.reason ?? null,
+  });
+
+  return { order: toOrder(updated), record };
 }
 
 export interface FulfilmentTransitionRequest {
@@ -251,7 +287,7 @@ export async function transitionFulfilment(
       reason: request.reason ?? null,
     });
 
-    const orderTransition = await syncOrderToFulfilments(handle, current.order_id, db);
+    const orderTransition = await syncOrderToFulfilments(handle, current.order_id);
 
     return { fulfilment: toFulfilment(updated), record, orderTransition };
   };
@@ -276,7 +312,6 @@ export async function transitionFulfilment(
 async function syncOrderToFulfilments(
   handle: Tx,
   orderId: string,
-  db: Database,
 ): Promise<TransitionResult | null> {
   const { rows } = await handle.query<{ status: string }>(
     "select status from fulfilments where order_id = $1",
@@ -293,10 +328,10 @@ async function syncOrderToFulfilments(
   if (order.status === target) return null;
 
   try {
-    return await transition(
-      db,
-      { orderId, to: target, actorId: null, actorKind: "system", reason: "fulfilments" },
+    return await moveOrder(
       handle,
+      { orderId, to: target, actorId: null, actorKind: "system", reason: "fulfilments" },
+      false,
     );
   } catch (error) {
     if (error instanceof AppError && error.kind === "conflict") return null;
