@@ -107,9 +107,9 @@ export interface LedgerEntryRow {
  * appears against this table. `seq` is cast to text for the same reason the
  * money columns are strings: it is a `bigint`.
  */
-export const LEDGER_COLUMNS = [
+const LEDGER_COLUMN_NAMES = [
   "id",
-  "seq::text as seq",
+  "seq",
   "artist_id",
   "fulfilment_id",
   "order_id",
@@ -125,7 +125,27 @@ export const LEDGER_COLUMNS = [
   "audit_entry_id",
   "reason",
   "created_at",
-].join(", ");
+] as const;
+
+/**
+ * The same list, qualified by a table alias.
+ *
+ * `eligibility.ts` joins `payout_ledger` against `fulfilments`, and the two
+ * share four column names -- `id`, `status`, `order_id`, `created_at`. An
+ * unqualified list is ambiguous there, and Postgres says so. Rather than keep a
+ * second hand-maintained list that could drift from this one, the qualifier is a
+ * function of the same array.
+ */
+export function ledgerColumns(alias?: string): string {
+  const prefix = alias === undefined ? "" : `${alias}.`;
+  return LEDGER_COLUMN_NAMES.map((name) =>
+    // `seq` is a bigint, so it makes the trip as text for the same reason the
+    // money columns do.
+    name === "seq" ? `${prefix}seq::text as seq` : `${prefix}${name}`,
+  ).join(", ");
+}
+
+export const LEDGER_COLUMNS = ledgerColumns();
 
 function iso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();

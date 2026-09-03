@@ -44,7 +44,7 @@
  */
 import type { Sql } from "@/shared/db";
 import { fromDbValue, type Agorot } from "@/shared/money";
-import { LEDGER_COLUMNS, toLedgerEntry, type LedgerEntry, type PayoutStatus } from "./types";
+import { ledgerColumns, toLedgerEntry, type LedgerEntry, type PayoutStatus } from "./types";
 
 /**
  * Why a payout is not payable right now. `null` when it is.
@@ -134,7 +134,7 @@ interface PayoutViewRow {
  */
 const PAYOUT_VIEW_SQL = `
   select
-    ${LEDGER_COLUMNS},
+    ${ledgerColumns("l")},
     d.delivered_at,
     d.delivered_at + make_interval(days => $1::int)                      as eligible_at,
     (d.delivered_at is not null
