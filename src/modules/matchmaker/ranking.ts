@@ -37,7 +37,7 @@
 import type { MatchmakerSettings } from "./config";
 import type { RotationEpoch } from "./rotation";
 import { rotationKey } from "./rotation";
-import type { ArtworkScore } from "./scoring";
+import { round6, type ArtworkScore } from "./scoring";
 
 export type RankingSettings = Pick<
   MatchmakerSettings,
@@ -82,7 +82,12 @@ export function rank(
     for (;;) {
       const candidate = sorted[next];
       if (candidate === undefined) break;
-      if (leader.score - candidate.score > settings.tieTolerance) break;
+      // Rounded before the comparison, for the reason `round6` exists at all:
+      // 0.9 - 0.88 is 0.020000000000000018 in IEEE-754, so an unrounded
+      // comparison puts a pair that a human would call exactly-at-tolerance
+      // OUTSIDE the band. Two artworks landing in the same band or not must not
+      // depend on the binary representation of a decimal the operator typed.
+      if (round6(leader.score - candidate.score) > settings.tieTolerance) break;
       band.push(candidate);
       next += 1;
     }
