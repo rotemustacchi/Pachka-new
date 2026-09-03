@@ -12,6 +12,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { useTestDatabase } from "../harness";
+import { LEDGER_SCHEMA, LEDGER_TABLE } from "@/shared/db";
 
 interface TableRow {
   readonly table_name: string;
@@ -34,13 +35,25 @@ async function tables(db: {
       join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'public'
       and c.relkind = 'r'
-      -- The migration ledger is infrastructure, not application data. It holds
-      -- filenames and checksums, is written only by the migration runner on the
-      -- privileged connection, and has no grant to anon or authenticated.
-      and c.relname <> 'schema_migrations'
     order by c.relname
   `);
   return rows;
+}
+
+/** Catalog lookup, so it works without USAGE on the schema being asked about. */
+async function tableExists(
+  db: { one<T>(text: string, params?: readonly unknown[]): Promise<T> },
+  schema: string,
+  table: string,
+): Promise<boolean> {
+  const row = await db.one<{ present: boolean }>(
+    `select exists (
+       select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = $1 and c.relname = $2 and c.relkind = 'r'
+     ) as present`,
+    [schema, table],
+  );
+  return row.present;
 }
 
 describe("every table in public", () => {
@@ -87,6 +100,75 @@ describe("every table in public", () => {
     expect(names).toContain("app_config");
     expect(names).toContain("artist_contact_details");
     expect(names.length).toBeGreaterThanOrEqual(7);
+  });
+});
+
+describe("the migration ledger", () => {
+  const database = useTestDatabase();
+
+  /**
+   * This test replaces an exemption rather than adding a rule.
+   *
+   * The table query above used to carry `and c.relname <> 'schema_migrations'`,
+   * on the stated grounds that the ledger "has no grant to anon or
+   * authenticated". That is true of the plain PostgreSQL this harness builds and
+   * false of a hosted Supabase project, where default privileges hand new tables
+   * in `public` to exactly those roles — so the one table the invariant test
+   * waived was the one table with RLS switched off entirely.
+   *
+   * The ledger now lives outside `public`, which is what actually keeps it off
+   * the data API: PostgREST serves only the schemas named in
+   * `supabase/config.toml`. The exemption is gone, and these assertions say in
+   * tests what the waiver used to assert in a comment.
+   */
+  it("is not in public, so PostgREST does not publish it", async () => {
+    // Read from the catalog rather than with `to_regclass`, which needs USAGE
+    // on the schema it is asked about -- and the application role deliberately
+    // has none on the ledger's.
+    expect(await tableExists(database.db, "public", "schema_migrations")).toBe(false);
+  });
+
+  it("exists where it is supposed to", async () => {
+    // Without this, the assertion above passes just as well on a database where
+    // no ledger exists at all.
+    expect(await tableExists(database.db, LEDGER_SCHEMA, "schema_migrations")).toBe(true);
+  });
+
+  it("is unreachable by the data-API roles, schema and table both", async () => {
+    // Addressed by OID rather than by name: the name forms of these functions
+    // have to resolve the identifier first, which needs USAGE on the schema --
+    // and not having that USAGE is half of what is being asserted.
+    const row = await database.db.one<{
+      anon_schema: boolean;
+      auth_schema: boolean;
+      anon_table: boolean;
+      auth_table: boolean;
+    }>(
+      `select has_schema_privilege('anon', n.oid, 'USAGE')          as anon_schema,
+              has_schema_privilege('authenticated', n.oid, 'USAGE') as auth_schema,
+              has_table_privilege('anon', c.oid, 'SELECT')          as anon_table,
+              has_table_privilege('authenticated', c.oid, 'SELECT') as auth_table
+         from pg_class c
+         join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = $1 and c.relname = 'schema_migrations'`,
+      [LEDGER_SCHEMA],
+    );
+    expect(row).toEqual({
+      anon_schema: false,
+      auth_schema: false,
+      anon_table: false,
+      auth_table: false,
+    });
+  });
+
+  it("is unreachable by the application role too, which has no business reading it", async () => {
+    // The ledger is the deploy's, not the application's. This is also the
+    // positive control for the three assertions above: they are about privilege
+    // checks returning false, and this one shows the same privileges actually
+    // being enforced against a live connection.
+    await expect(
+      database.db.query(`select name from ${LEDGER_TABLE}`),
+    ).rejects.toThrow(/permission denied/i);
   });
 });
 

@@ -109,7 +109,7 @@ describe("the rate table on the public data API", () => {
   it("is readable by an anonymous visitor, because a buyer is shown shipping before they pay", async () => {
     await seedCell(database.db, 3900);
 
-    const visible = await asAnon(database.db, async (tx) => {
+    const visible = await asAnon(database.dataApi, async (tx) => {
       const { rows } = await tx.query<{ amount_agorot: string }>("select amount_agorot from shipping_rates");
       return rows;
     });
@@ -127,7 +127,7 @@ describe("the rate table on the public data API", () => {
       active: false,
     });
 
-    const zoneCodes = await asAnon(database.db, async (tx) => {
+    const zoneCodes = await asAnon(database.dataApi, async (tx) => {
       const { rows } = await tx.query<{ code: string }>("select code from shipping_zones");
       return rows.map((row) => row.code);
     });
@@ -140,7 +140,7 @@ describe("the rate table on the public data API", () => {
     await seedCell(database.db, 3900);
 
     await expect(
-      asUser(database.db, buyerId, (tx) =>
+      asUser(database.dataApi, buyerId, (tx) =>
         tx.query("update shipping_rates set amount_agorot = 1"),
       ),
     ).rejects.toThrow(/permission denied/i);
@@ -150,7 +150,7 @@ describe("the rate table on the public data API", () => {
     await seedCell(database.db, 3900);
 
     await expect(
-      asAnon(database.db, (tx) =>
+      asAnon(database.dataApi, (tx) =>
         tx.query(
           "insert into shipping_zones (code, display_name) values ('free_delivery', 'x')",
         ),

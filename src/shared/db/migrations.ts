@@ -18,6 +18,34 @@ import type { Client, ClientBase, Pool } from "pg";
 
 export const MIGRATIONS_DIR = path.join(process.cwd(), "db", "migrations");
 
+/**
+ * The schema the migration ledger lives in — deliberately not `public`.
+ *
+ * Supabase publishes a PostgREST data API for every table in the schemas listed
+ * in `supabase/config.toml`, which is `public` and `graphql_public`. A ledger in
+ * `public` is therefore an endpoint: `GET /rest/v1/schema_migrations` returns
+ * every migration filename and checksum to anyone holding the anon key, which
+ * ships in the browser bundle by design. The filenames in this repository
+ * describe their own contents — `harden_app_config`, `create_accounts_identity`
+ * — so that reads as a list of which security migrations are deployed, which is
+ * reconnaissance an attacker would otherwise have to guess at.
+ *
+ * The ledger used to be created unqualified, so it landed in `public`, and
+ * `schema-invariants.test.ts` excused it from the RLS invariants on the grounds
+ * that it "has no grant to anon or authenticated". That is true of the plain
+ * PostgreSQL the harness builds and false of a hosted Supabase project, where
+ * default privileges hand new tables in `public` to those roles. The one table
+ * the invariant test waived was the one table with RLS switched off entirely.
+ *
+ * Moving it out of `public` fixes the exposure at the source rather than
+ * patching the symptom: no grant, no policy and no future migration can publish
+ * something PostgREST does not serve. See docs/security-audit-01.md finding H2.
+ */
+export const LEDGER_SCHEMA = "pachka_meta";
+
+/** Schema-qualified ledger table. Never referenced unqualified. */
+export const LEDGER_TABLE = `${LEDGER_SCHEMA}.schema_migrations`;
+
 /** Filenames must sort chronologically: `20260827T120000_add_app_config.sql`. */
 const FILENAME = /^\d{8}T\d{6}_[a-z0-9]+(?:_[a-z0-9]+)*\.sql$/;
 
@@ -68,12 +96,54 @@ export async function loadMigrations(dir: string = MIGRATIONS_DIR): Promise<Migr
 }
 
 async function ensureLedger(db: Queryable): Promise<void> {
+  await db.query(`create schema if not exists ${LEDGER_SCHEMA}`);
   await db.query(`
-    create table if not exists schema_migrations (
+    create table if not exists ${LEDGER_TABLE} (
       name        text        primary key,
       checksum    text        not null,
       applied_at  timestamptz not null default now()
     )
+  `);
+
+  // Stated rather than assumed. PUBLIC gets USAGE on a newly created schema in
+  // some configurations, and the whole point of the move is that nothing but
+  // the migration runner reaches this.
+  await db.query(`revoke all on schema ${LEDGER_SCHEMA} from public`);
+  await db.query(`revoke all on ${LEDGER_TABLE} from public`);
+  await db.query(`
+    do $ledger$
+    begin
+      if exists (select 1 from pg_roles where rolname = 'anon') then
+        execute 'revoke all on schema ${LEDGER_SCHEMA} from anon';
+        execute 'revoke all on ${LEDGER_TABLE} from anon';
+      end if;
+      if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        execute 'revoke all on schema ${LEDGER_SCHEMA} from authenticated';
+        execute 'revoke all on ${LEDGER_TABLE} from authenticated';
+      end if;
+    end
+    $ledger$
+  `);
+
+  // Adopt a ledger left in `public` by a release that ran before the move.
+  //
+  // Without this, the runner would find an empty ledger on a database that is
+  // already fully migrated and try to apply every migration again — failing
+  // loudly on the first `create table`, but only after a deploy had started.
+  // Copying the rows forward makes the relocation a no-op for such a database.
+  // The old table is left in place rather than dropped: migrations here are
+  // forward-only, and an empty legacy table exposes nothing a checksum could
+  // not already be guessed from.
+  await db.query(`
+    do $adopt$
+    begin
+      if to_regclass('public.schema_migrations') is not null then
+        execute 'insert into ${LEDGER_TABLE} (name, checksum, applied_at)
+                 select name, checksum, applied_at from public.schema_migrations
+                 on conflict (name) do nothing';
+      end if;
+    end
+    $adopt$
   `);
 }
 
@@ -108,7 +178,7 @@ export async function migrate(
     await db.query("begin");
     try {
       await db.query(migration.sql);
-      await db.query("insert into schema_migrations (name, checksum) values ($1, $2)", [
+      await db.query(`insert into ${LEDGER_TABLE} (name, checksum) values ($1, $2)`, [
         migration.name,
         migration.checksum,
       ]);
@@ -129,7 +199,7 @@ async function appliedMap(
   db: Queryable,
 ): Promise<Map<string, { checksum: string; appliedAt: Date }>> {
   const { rows } = await db.query<{ name: string; checksum: string; applied_at: Date }>(
-    "select name, checksum, applied_at from schema_migrations",
+    `select name, checksum, applied_at from ${LEDGER_TABLE}`,
   );
   return new Map(rows.map((r) => [r.name, { checksum: r.checksum, appliedAt: r.applied_at }]));
 }

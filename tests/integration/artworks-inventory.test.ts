@@ -38,7 +38,7 @@ import {
   type InventoryDemand,
   type InventoryDemandSource,
 } from "@/modules/artworks";
-import { useTestDatabase } from "../harness";
+import { defineScratchTable, grantAdminRole, useTestDatabase, type TestDatabase } from "../harness";
 
 async function seedArtist(db: Database): Promise<string> {
   const id = randomUUID();
@@ -51,11 +51,14 @@ async function seedArtist(db: Database): Promise<string> {
   return id;
 }
 
-async function seedAdmin(db: Database): Promise<string> {
+async function seedAdmin(database: TestDatabase): Promise<string> {
+  const db = database.db;
   const id = randomUUID();
   await db.query("insert into profiles (user_id, display_name) values ($1, 'מנהלת')", [id]);
   await db.query("insert into account_status (user_id, verified_at) values ($1, now())", [id]);
-  await db.query("insert into user_roles (user_id, role) values ($1, 'admin')", [id]);
+  // Out of band, because SECURITY.md S0-2 item 4 puts granting `admin` outside
+  // the application and `user_roles_server_insert` now enforces that.
+  await grantAdminRole(database, id);
   return id;
 }
 
@@ -84,15 +87,17 @@ const COMPLETE: ArtworkInput = {
  * rather than a canned return value is what lets the concurrency test below
  * mean anything.
  */
-async function createOrderHolds(db: Database): Promise<void> {
-  await db.query(`
-    create table test_order_holds (
+async function createOrderHolds(database: TestDatabase): Promise<void> {
+  await defineScratchTable(
+    database,
+    "test_order_holds",
+    `create table test_order_holds (
       id         uuid primary key default gen_random_uuid(),
       artwork_id uuid not null references artworks (id),
       units      integer not null check (units > 0),
       state      text not null check (state in ('held', 'confirmed', 'released'))
-    )
-  `);
+    )`,
+  );
 }
 
 const orderHolds: InventoryDemandSource = {
@@ -156,7 +161,7 @@ describe("unique pieces and editions", () => {
   const database = useTestDatabase();
 
   it("pins a unique piece to one unit however large a stock is submitted", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
 
@@ -172,7 +177,7 @@ describe("unique pieces and editions", () => {
 
   /** artwork-listings: "Unique piece sells out". */
   it("marks a unique piece sold and removes it from purchasable results", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "unique" });
@@ -194,7 +199,7 @@ describe("unique pieces and editions", () => {
 
   /** artwork-listings: "Edition stock decrements" -- observably, by derivation. */
   it("shows nine remaining after one of an edition of ten is sold, and stays purchasable", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "edition", stock: 10 });
@@ -216,7 +221,7 @@ describe("unique pieces and editions", () => {
 
   /** artwork-listings: "Edition reaches zero". */
   it("marks an edition sold out when the last unit goes", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "edition", stock: 3 });
@@ -230,7 +235,7 @@ describe("unique pieces and editions", () => {
   });
 
   it("counts an in-progress checkout against availability without marking it sold", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "edition", stock: 2 });
@@ -250,7 +255,7 @@ describe("unique pieces and editions", () => {
    * sold out forever with stock sitting in the artist's studio.
    */
   it("returns a sold-out edition to published when a cancelled order frees a unit", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "edition", stock: 2 });
@@ -269,7 +274,7 @@ describe("unique pieces and editions", () => {
   });
 
   it("never reports a negative availability, and reports the overshoot separately", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "edition", stock: 2 });
@@ -283,7 +288,7 @@ describe("unique pieces and editions", () => {
   });
 
   it("requires a production lead time for a made-to-order edition", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const draft = await createDraft(d, artistId, {
@@ -308,7 +313,7 @@ describe("the listing lifecycle", () => {
 
   /** artwork-listings: "Artist unlists an artwork". */
   it("removes an unlisted artwork from public view but keeps it on the dashboard", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId);
@@ -322,7 +327,7 @@ describe("the listing lifecycle", () => {
   });
 
   it("lets an artist relist what they unlisted", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId);
@@ -335,10 +340,10 @@ describe("the listing lifecycle", () => {
 
   /** artwork-listings: "Artist attempts to republish a removed artwork". */
   it("refuses to republish an artwork an admin removed", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const artworkId = await publish(d, artistId);
 
     await removeArtwork(d, adminId, artworkId);
@@ -356,10 +361,10 @@ describe("the listing lifecycle", () => {
   });
 
   it("refuses to edit a removed artwork back into acceptability", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const artworkId = await publish(d, artistId);
     await removeArtwork(d, adminId, artworkId);
 
@@ -369,10 +374,10 @@ describe("the listing lifecycle", () => {
   });
 
   it("returns not-found for a removed artwork on a buyer-facing read", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const artworkId = await publish(d, artistId);
     await removeArtwork(d, adminId, artworkId);
 
@@ -399,7 +404,7 @@ describe("the listing lifecycle", () => {
   });
 
   it("treats publishing an already-published artwork as a no-op rather than an error", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId);
@@ -417,7 +422,7 @@ describe("an artwork reserved by an in-progress order", () => {
 
   /** artwork-listings: "Artwork with a pending order cannot be unlisted". */
   it("cannot be unlisted, and the refusal explains that the order must resolve", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "unique" });
@@ -441,7 +446,7 @@ describe("an artwork reserved by an in-progress order", () => {
   });
 
   it("cannot be taken back to draft either, since that also pulls it from the catalog", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "unique" });
@@ -453,7 +458,7 @@ describe("an artwork reserved by an in-progress order", () => {
   });
 
   it("can be unlisted once the reservation is released", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "unique" });
@@ -477,10 +482,10 @@ describe("an artwork reserved by an in-progress order", () => {
    * must be able to regardless.
    */
   it("can still be removed by an admin", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const artworkId = await publish(d, artistId, { inventoryType: "unique" });
     await hold(database.db, artworkId, "held");
 
@@ -505,7 +510,7 @@ describe("an artwork reserved by an in-progress order", () => {
    * than guessing at a duration.
    */
   it("makes an unlist wait for an in-flight reservation rather than racing it", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     const artworkId = await publish(d, artistId, { inventoryType: "unique" });
@@ -581,13 +586,15 @@ describe("the artist dashboard", () => {
   const database = useTestDatabase();
 
   it("shows state, price, declared stock, derived availability and match impressions", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const artistId = await seedArtist(database.db);
 
     // A real impression source over a real table, the way `matchmaker` will
     // supply one. Nothing is asserted about it having been called; the
     // assertion is on the number that reaches the dashboard.
-    await database.db.query(
+    await defineScratchTable(
+      database,
+      "test_match_impressions",
       "create table test_match_impressions (artwork_id uuid not null, shown_at timestamptz not null default now())",
     );
     const impressions: ImpressionSource = {
@@ -624,7 +631,7 @@ describe("the artist dashboard", () => {
   });
 
   it("lists drafts and unlisted artworks before published ones", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
 
@@ -644,7 +651,7 @@ describe("the artist dashboard", () => {
   });
 
   it("shows only the asking artist's own listings", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const mine = await seedArtist(database.db);
     const theirs = await seedArtist(database.db);
@@ -657,7 +664,7 @@ describe("the artist dashboard", () => {
   });
 
   it("offers the actions the state machine permits, and no others", async () => {
-    await createOrderHolds(database.db);
+    await createOrderHolds(database);
     const d = depsWithHolds(database.db);
     const artistId = await seedArtist(database.db);
     await publish(d, artistId);

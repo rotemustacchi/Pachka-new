@@ -17,12 +17,25 @@
  * controls that still work once the attacker has the service-role key.
  */
 import { randomUUID } from "node:crypto";
+import type { Client } from "pg";
 import { describe, expect, it } from "vitest";
-import { asAnon, asUser, useTestDatabase } from "../harness";
+import {
+  asAnon,
+  asUser,
+  grantAdminRole,
+  useTestDatabase,
+  withPrivilegedConnection,
+  type TestDatabase,
+} from "../harness";
 import { recordAdminAction, verifyAuditChain, withAdminAction } from "@/modules/moderation";
 import type { Database } from "@/shared/db";
 
-async function seedAccount(db: Database, roles: readonly string[], name = "Noa A."): Promise<string> {
+async function seedAccount(
+  database: TestDatabase,
+  roles: readonly string[],
+  name = "Noa A.",
+): Promise<string> {
+  const db = database.db;
   const { rows } = await db.query<{ user_id: string }>(
     "insert into profiles (user_id, display_name) values (gen_random_uuid(), $1) returning user_id",
     [name],
@@ -30,12 +43,17 @@ async function seedAccount(db: Database, roles: readonly string[], name = "Noa A
   const id = rows[0]!.user_id;
   await db.query("insert into account_status (user_id, verified_at) values ($1, now())", [id]);
   for (const role of roles) {
-    await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
+    // `admin` is not grantable through the application (SECURITY.md S0-2 item
+    // 4), and `user_roles_server_insert` enforces that, so it is seeded the way
+    // an operator would grant it: out of band, with database credentials.
+    if (role === "admin") await grantAdminRole(database, id);
+    else await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
   }
   return id;
 }
 
-const seedAdmin = (db: Database, name = "Admin A.") => seedAccount(db, ["buyer", "admin"], name);
+const seedAdmin = (database: TestDatabase, name = "Admin A.") =>
+  seedAccount(database, ["buyer", "admin"], name);
 
 /** Append `count` entries as `adminId`, returning them oldest-first. */
 async function appendEntries(db: Database, adminId: string, count: number) {
@@ -59,7 +77,7 @@ describe("an admin action is recorded", () => {
   const database = useTestDatabase();
 
   it("writes one entry carrying actor, timestamp, target, and note", async () => {
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const before = Date.now();
 
     const entry = await withAdminAction(database.db, adminId, (tx) =>
@@ -87,7 +105,7 @@ describe("an admin action is recorded", () => {
   });
 
   it("refuses an action outside the recordable set", async () => {
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
 
     await expect(
       withAdminAction(database.db, adminId, (tx) =>
@@ -109,7 +127,7 @@ describe("an admin action is recorded", () => {
     // because an audit writer that opens its own transaction still LOOKS right
     // when the failure happens before it -- the failure that catches it is one
     // that happens after.
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
 
     await expect(
       withAdminAction(database.db, adminId, async (tx) => {
@@ -132,7 +150,7 @@ describe("an admin action is recorded", () => {
   it("is not visible to anyone else until its transaction commits", async () => {
     // Two real connections. The second is not inside the first's transaction,
     // so it sees the log the way a concurrent request or the alerting job does.
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const observer = await database.pool.connect();
 
     try {
@@ -173,8 +191,8 @@ describe("the actor and timestamp on an entry", () => {
   it("come from the session, not from the values the caller supplied", async () => {
     // SECURITY.md S1-14: "the audit row records an actor and timestamp taken
     // from the caller, so the caller writes whatever actor they like".
-    const adminId = await seedAdmin(database.db);
-    const otherAdminId = await seedAdmin(database.db, "Admin B.");
+    const adminId = await seedAdmin(database);
+    const otherAdminId = await seedAdmin(database, "Admin B.");
 
     const row = await withAdminAction(database.db, adminId, (tx) =>
       tx.one<{ actor: string; at: Date }>(
@@ -207,14 +225,28 @@ describe("the actor and timestamp on an entry", () => {
 describe("an entry already written", () => {
   const database = useTestDatabase();
 
-  it("cannot be updated, even by the role the application itself connects as", async () => {
-    const adminId = await seedAdmin(database.db);
+  it("cannot be updated by the role the application itself connects as", async () => {
+    const adminId = await seedAdmin(database);
     const [entry] = await appendEntries(database.db, adminId, 1);
 
-    // `database.db` is the real shared/db client on the privileged connection:
-    // the same role, and the same bypass of RLS, that module code runs with.
+    // `database.db` is the real shared/db client on the connection module code
+    // runs with. It is refused before the trigger is reached: the table grants
+    // it SELECT and INSERT and nothing else, and there is no UPDATE policy for
+    // any role. Two independent controls, and this is the outer one.
     await expect(
       database.db.query("update admin_audit set note = 'x' where id = $1", [entry!.id]),
+    ).rejects.toThrow(/permission denied|row-level security/i);
+
+    // And the inner one, which is the control that still matters after an
+    // attacker has database credentials: the trigger refuses the same statement
+    // from the table's own owner, who is not subject to either of the above.
+    await expect(
+      withPrivilegedConnection(
+        database,
+        "simulating an attacker who holds the database owner's credentials",
+        (client) =>
+          client.query("update admin_audit set note = 'x' where id = $1", [entry!.id]),
+      ),
     ).rejects.toThrow(/append-only/i);
 
     const after = await database.db.one<{ count: string; note: string; row_hash: string }>(
@@ -228,12 +260,21 @@ describe("an entry already written", () => {
     expect(after.row_hash).toBe(entry!.rowHash);
   });
 
-  it("cannot be deleted, even by the role the application itself connects as", async () => {
-    const adminId = await seedAdmin(database.db);
+  it("cannot be deleted by the role the application itself connects as", async () => {
+    const adminId = await seedAdmin(database);
     const [entry] = await appendEntries(database.db, adminId, 1);
 
     await expect(
       database.db.query("delete from admin_audit where id = $1", [entry!.id]),
+    ).rejects.toThrow(/permission denied|row-level security/i);
+
+    // The owner is refused too, by the trigger rather than by a privilege.
+    await expect(
+      withPrivilegedConnection(
+        database,
+        "simulating an attacker who holds the database owner's credentials",
+        (client) => client.query("delete from admin_audit where id = $1", [entry!.id]),
+      ),
     ).rejects.toThrow(/append-only/i);
 
     const after = await database.db.one<{ count: string; row_hash: string }>(
@@ -257,7 +298,7 @@ describe("the hash chain", () => {
       reason: null,
     });
 
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     await appendEntries(database.db, adminId, 5);
 
     expect(await verifyAuditChain(database.db)).toEqual({
@@ -268,7 +309,7 @@ describe("the hash chain", () => {
   });
 
   it("links each entry to the one before it", async () => {
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const written = await appendEntries(database.db, adminId, 4);
 
     for (let index = 1; index < written.length; index += 1) {
@@ -284,12 +325,12 @@ describe("the hash chain", () => {
     // The attacker here holds database credentials and has disabled the
     // immutability trigger -- which a superuser can do and the application
     // cannot. This is the scenario the chain exists for.
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const written = await appendEntries(database.db, adminId, 5);
     const target = written[2]!;
 
-    await tamper(database.db, () =>
-      database.db.query("update admin_audit set note = 'nothing to see here' where id = $1", [
+    await tamper(database, (client) =>
+      client.query("update admin_audit set note = 'nothing to see here' where id = $1", [
         target.id,
       ]),
     );
@@ -309,13 +350,13 @@ describe("the hash chain", () => {
   });
 
   it("reports a break when a row is deleted out of band", async () => {
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const written = await appendEntries(database.db, adminId, 5);
     const removed = written[2]!;
     const following = written[3]!;
 
-    await tamper(database.db, () =>
-      database.db.query("delete from admin_audit where id = $1", [removed.id]),
+    await tamper(database, (client) =>
+      client.query("delete from admin_audit where id = $1", [removed.id]),
     );
 
     const { rows } = await database.db.query<{ count: string }>(
@@ -337,12 +378,12 @@ describe("the hash chain", () => {
     // no later row is left to fail to link. Inside the table, "the log stops
     // here" and "the log was cut here" are the same picture -- so the test
     // first proves the walk alone is fooled, then proves what is not.
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const written = await appendEntries(database.db, adminId, 3);
     const checkpoint = written[2]!.rowHash;
 
-    await tamper(database.db, () =>
-      database.db.query("delete from admin_audit where id = $1", [written[2]!.id]),
+    await tamper(database, (client) =>
+      client.query("delete from admin_audit where id = $1", [written[2]!.id]),
     );
 
     expect(await verifyAuditChain(database.db)).toEqual({
@@ -359,7 +400,7 @@ describe("the hash chain", () => {
   });
 
   it("does not cry wolf when the checkpoint is simply older than the tip", async () => {
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     const written = await appendEntries(database.db, adminId, 2);
     const checkpoint = written[0]!.rowHash;
 
@@ -377,21 +418,20 @@ describe("reading the audit log through the data API", () => {
   const database = useTestDatabase();
 
   it("is refused outright for an anonymous visitor", async () => {
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     await appendEntries(database.db, adminId, 1);
 
     await expect(
-      asAnon(database.db, (tx) => tx.query("select * from admin_audit")),
+      asAnon(database.dataApi, (tx) => tx.query("select * from admin_audit")),
     ).rejects.toThrow(/permission denied/i);
   });
 
   it("returns nothing to a signed-in account that is not an admin", async () => {
-    const adminId = await seedAdmin(database.db);
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer B.");
+    const adminId = await seedAdmin(database);
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer B.");
     await appendEntries(database.db, adminId, 3);
 
-    const rows = await asUser(
-      database.db,
+    const rows = await asUser(database.dataApi,
       buyerId,
       async (tx) => (await tx.query("select * from admin_audit")).rows,
       // Everything a buyer can put in their own token, which they can rewrite
@@ -403,11 +443,10 @@ describe("reading the audit log through the data API", () => {
   });
 
   it("returns the entries to an admin", async () => {
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
     await appendEntries(database.db, adminId, 3);
 
-    const rows = await asUser(
-      database.db,
+    const rows = await asUser(database.dataApi,
       adminId,
       async (tx) => (await tx.query("select * from admin_audit")).rows,
     );
@@ -418,10 +457,10 @@ describe("reading the audit log through the data API", () => {
   it("does not let an admin write one by hand through the data API", async () => {
     // The audit writer runs on the server. There is no grant behind the INSERT
     // policy, so even the role the policy would admit cannot reach the table.
-    const adminId = await seedAdmin(database.db);
+    const adminId = await seedAdmin(database);
 
     await expect(
-      asUser(database.db, adminId, (tx) =>
+      asUser(database.dataApi, adminId, (tx) =>
         tx.query(
           `insert into admin_audit (actor, at, action, target_type, target_id)
            values (auth.uid(), now(), 'payout_settlement', 'payout', 'p1')`,
@@ -437,12 +476,30 @@ describe("reading the audit log through the data API", () => {
  *
  * This is a test fixture, not a code path. It exists to prove the control that
  * still works when this one has been defeated.
+ *
+ * It runs on the privileged connection rather than the application one, and
+ * that is the fixture being faithful rather than the fixture cheating. Neither
+ * `alter table ... disable trigger` nor an UPDATE or DELETE on `admin_audit` is
+ * available to the application role — no policy grants them and none should,
+ * which the tests above assert directly. The attacker this scenario models is
+ * specifically one who has the database owner's credentials, so giving the
+ * fixture anything less would test a weaker attacker than the hash chain is
+ * designed to catch.
  */
-async function tamper(db: Database, act: () => Promise<unknown>): Promise<void> {
-  await db.query("alter table admin_audit disable trigger admin_audit_append_only");
-  try {
-    await act();
-  } finally {
-    await db.query("alter table admin_audit enable trigger admin_audit_append_only");
-  }
+async function tamper(
+  database: TestDatabase,
+  act: (client: Client) => Promise<unknown>,
+): Promise<void> {
+  await withPrivilegedConnection(
+    database,
+    "simulating an attacker who holds the database owner's credentials",
+    async (client) => {
+      await client.query("alter table admin_audit disable trigger admin_audit_append_only");
+      try {
+        await act(client);
+      } finally {
+        await client.query("alter table admin_audit enable trigger admin_audit_append_only");
+      }
+    },
+  );
 }

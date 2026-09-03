@@ -509,10 +509,10 @@ describe("a dispatch on the public data API", () => {
       paidAt: PAID_AT,
     });
 
-    const own = await asUser(database.db, artistId, async (tx) =>
+    const own = await asUser(database.dataApi, artistId, async (tx) =>
       (await tx.query("select id from shipping_dispatches")).rows,
     );
-    const other = await asUser(database.db, otherArtist, async (tx) =>
+    const other = await asUser(database.dataApi, otherArtist, async (tx) =>
       (await tx.query("select id from shipping_dispatches")).rows,
     );
 

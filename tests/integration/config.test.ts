@@ -8,7 +8,33 @@ import { createDatabase } from "@/shared/db";
 import { isAppError } from "@/shared/errors";
 import { CONFIG_CACHE_TTL_MS, getConfig, invalidateConfig, setConfig } from "@/shared/config";
 import type { ConfigKey } from "@/shared/config";
-import { useTestDatabase } from "../harness";
+import { useTestDatabase, withPrivilegedConnection } from "../harness";
+
+/**
+ * Put the database into a state no application role can reach.
+ *
+ * Every fixture below is here for the same reason. `shared/config` has two
+ * fallbacks -- a missing row falls back to the registry's compiled-in default,
+ * and a stored value whose shape contradicts its declared type is refused
+ * rather than coerced -- and neither state can be produced through `setConfig`.
+ * There is no DELETE policy on `app_config` at all (removing a key is a
+ * migration, so that the deletion is reviewed with the code that stops reading
+ * it), and `app_config_value_matches_declared_type` makes the mismatched row
+ * impossible to write. Those states arrive by restored backup, by hand-edited
+ * row, or by a key deployed ahead of its migration -- which is precisely why
+ * the reader guards against them, and why setting one up needs the credentials
+ * those paths had. Dropping a constraint needs table ownership regardless.
+ */
+const arrange = (
+  database: { readonly name: string },
+  sql: string,
+  params: readonly unknown[] = [],
+): Promise<unknown> =>
+  withPrivilegedConnection(
+    database,
+    "arranging a database state only a migration or a restored backup produces",
+    (client) => client.query(sql, [...params]),
+  );
 
 function captureError(fn: () => unknown): Promise<unknown> {
   return Promise.resolve()
@@ -30,7 +56,7 @@ describe("getConfig() — reading app_config", () => {
   });
 
   it("returns the code-declared default when the row is missing from the table entirely", async () => {
-    await database.db.query("delete from app_config where key = $1", [
+    await arrange(database, "delete from app_config where key = $1", [
       "shipping.unshipped_grace_days",
     ]);
 
@@ -46,12 +72,8 @@ describe("getConfig() — reading app_config", () => {
     // write normally. Drop it to stand in for a row that arrived another way —
     // a restored backup, a hand-edited row — which is exactly the case the
     // reader's own check exists to catch.
-    await database.db.query(
-      "alter table app_config drop constraint app_config_value_matches_declared_type",
-    );
-    await database.db.query(
-      "alter table app_config drop constraint app_config_value_within_bounds",
-    );
+    await arrange(database, "alter table app_config drop constraint app_config_value_matches_declared_type");
+    await arrange(database, "alter table app_config drop constraint app_config_value_within_bounds");
     await database.db.query(
       "update app_config set value = $2::jsonb where key = $1",
       ["platform.commission_rate_bp", JSON.stringify("not-a-number")],
@@ -63,12 +85,8 @@ describe("getConfig() — reading app_config", () => {
   });
 
   it("rejects a row whose value_type column disagrees with the registry's declared type", async () => {
-    await database.db.query(
-      "alter table app_config drop constraint app_config_value_matches_declared_type",
-    );
-    await database.db.query(
-      "alter table app_config drop constraint app_config_value_within_bounds",
-    );
+    await arrange(database, "alter table app_config drop constraint app_config_value_matches_declared_type");
+    await arrange(database, "alter table app_config drop constraint app_config_value_within_bounds");
     await database.db.query("update app_config set value_type = $2 where key = $1", [
       "platform.commission_rate_bp",
       "string",
@@ -186,7 +204,7 @@ describe("bounds — SECURITY.md S1-16", () => {
   it("falls back to the built-in default when a stored value is out of range", async () => {
     // Simulate a row that got around the database constraint: a restored
     // backup, a hand-edited row, a replication artefact.
-    await database.db.query("alter table app_config drop constraint app_config_value_within_bounds");
+    await arrange(database, "alter table app_config drop constraint app_config_value_within_bounds");
     await database.db.query("update app_config set value = '-500'::jsonb where key = $1", [
       "platform.commission_rate_bp",
     ]);
@@ -199,7 +217,7 @@ describe("bounds — SECURITY.md S1-16", () => {
   });
 
   it("falls back rather than throwing, so one bad row cannot take checkout down", async () => {
-    await database.db.query("alter table app_config drop constraint app_config_value_within_bounds");
+    await arrange(database, "alter table app_config drop constraint app_config_value_within_bounds");
     await database.db.query("update app_config set value = '99999'::jsonb where key = $1", [
       "platform.commission_rate_bp",
     ]);
@@ -264,7 +282,7 @@ describe("setConfig()", () => {
   });
 
   it("inserts the row when the key is missing from the table entirely (a new key deployed ahead of its migration)", async () => {
-    await database.db.query("delete from app_config where key = $1", [
+    await arrange(database, "delete from app_config where key = $1", [
       "shipping.unshipped_grace_days",
     ]);
 

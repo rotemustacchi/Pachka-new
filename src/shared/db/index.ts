@@ -20,6 +20,8 @@ export {
   migrationFilename,
   status as migrationStatus,
   MIGRATIONS_DIR,
+  LEDGER_SCHEMA,
+  LEDGER_TABLE,
   type LintFinding,
   type Migration,
   type MigrationStatus,

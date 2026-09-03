@@ -22,7 +22,13 @@
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { asAnon, asUser, useTestDatabase } from "../harness";
+import {
+  asAnon,
+  asUser,
+  grantAdminRole,
+  useTestDatabase,
+  type TestDatabase,
+} from "../harness";
 import { FakeAuthGateway } from "../fakes/auth-gateway";
 import {
   REPORT_MAX_PER_WINDOW,
@@ -57,7 +63,12 @@ class FakeMailer implements Mailer {
 // Seeding. Every test builds its own; the database is thrown away afterwards.
 // ---------------------------------------------------------------------------
 
-async function seedAccount(db: Database, roles: readonly string[], name: string): Promise<string> {
+async function seedAccount(
+  database: TestDatabase,
+  roles: readonly string[],
+  name: string,
+): Promise<string> {
+  const db = database.db;
   const { rows } = await db.query<{ user_id: string }>(
     "insert into profiles (user_id, display_name) values (gen_random_uuid(), $1) returning user_id",
     [name],
@@ -65,13 +76,18 @@ async function seedAccount(db: Database, roles: readonly string[], name: string)
   const id = rows[0]!.user_id;
   await db.query("insert into account_status (user_id, verified_at) values ($1, now())", [id]);
   for (const role of roles) {
-    await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
+    // `admin` is not grantable through the application (SECURITY.md S0-2 item
+    // 4), and `user_roles_server_insert` enforces that, so it is seeded the way
+    // an operator would grant it: out of band, with database credentials.
+    if (role === "admin") await grantAdminRole(database, id);
+    else await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
   }
   return id;
 }
 
-async function seedArtist(db: Database, name = "Yael K."): Promise<string> {
-  const id = await seedAccount(db, ["buyer", "artist"], name);
+async function seedArtist(database: TestDatabase, name = "Yael K."): Promise<string> {
+  const db = database.db;
+  const id = await seedAccount(database, ["buyer", "artist"], name);
   await db.query("insert into artist_profiles (user_id, display_name) values ($1, $2)", [id, name]);
   return id;
 }
@@ -84,7 +100,8 @@ async function seedArtist(db: Database, name = "Yael K."): Promise<string> {
  * thing is the price of testing against the real constraint rather than a
  * relaxed copy of it.
  */
-async function seedPublishedArtwork(db: Database, artistId: string, title = "Sunrise over Jaffa") {
+async function seedPublishedArtwork(database: TestDatabase, artistId: string, title = "Sunrise over Jaffa") {
+  const db = database.db;
   const { rows } = await db.query<{ id: string }>(
     `insert into artworks (
        artist_id, status, title, description, price_agorot,
@@ -117,8 +134,8 @@ describe("an anonymous visitor filing a report", () => {
   const database = useTestDatabase();
 
   it("records it against the artwork and confirms receipt", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -158,7 +175,7 @@ describe("an anonymous visitor filing a report", () => {
   });
 
   it("can report an artist profile as well as an artwork", async () => {
-    const artistId = await seedArtist(database.db);
+    const artistId = await seedArtist(database);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -179,8 +196,8 @@ describe("an anonymous visitor filing a report", () => {
   });
 
   it("accepts every reason in the fixed set, and no others", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -203,8 +220,8 @@ describe("an anonymous visitor filing a report", () => {
     // list, and S3-30 names hashed reporter IPs as a data class this system
     // holds. Unhashed, `reports` becomes a list of everyone who has ever
     // objected to a listing -- which is the list an artist with a grudge wants.
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
     const clientId = "203.0.113.42";
@@ -234,9 +251,9 @@ describe("an anonymous visitor filing a report", () => {
   });
 
   it("records the account when the reporter happens to be signed in", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
-    const buyerId = await seedAccount(database.db, ["buyer"], "Signed-in Buyer");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
+    const buyerId = await seedAccount(database, ["buyer"], "Signed-in Buyer");
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -259,8 +276,8 @@ describe("reports that must be rejected", () => {
   const database = useTestDatabase();
 
   it("rejects a submission with no reason selected, and writes nothing", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps } = depsFor(database.db);
 
     for (const reason of [null, undefined, "", "   "]) {
@@ -279,8 +296,8 @@ describe("reports that must be rejected", () => {
   it("rejects a reason outside the fixed set", async () => {
     // A reason nobody can render is not a reason. The set is closed server-side
     // as well as in the database, so a crafted request cannot introduce one.
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -307,8 +324,8 @@ describe("reports that must be rejected", () => {
   });
 
   it("rejects a client it cannot identify, because it could not be rate-limited", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -323,8 +340,8 @@ describe("reports that must be rejected", () => {
   });
 
   it("rejects free text longer than the column allows", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -344,9 +361,9 @@ describe("several reports against one subject", () => {
   const database = useTestDatabase();
 
   it("group into a single queue item carrying the count", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin A.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin A.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -378,10 +395,10 @@ describe("several reports against one subject", () => {
   });
 
   it("keep two different subjects as two separate items", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin B.");
-    const artistId = await seedArtist(database.db);
-    const first = await seedPublishedArtwork(database.db, artistId, "First");
-    const second = await seedPublishedArtwork(database.db, artistId, "Second");
+    const adminId = await seedAccount(database, ["admin"], "Admin B.");
+    const artistId = await seedArtist(database);
+    const first = await seedPublishedArtwork(database, artistId, "First");
+    const second = await seedPublishedArtwork(database, artistId, "Second");
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -412,9 +429,9 @@ describe("report flooding", () => {
     // count already recorded is not inflated by the refused attempts". An
     // implementation that refuses correctly but still counts is the failure the
     // spec is warning about, so both halves are asserted, separately.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin C.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin C.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
     const flooder = "198.51.100.200";
@@ -464,8 +481,8 @@ describe("report flooding", () => {
     // recording the refused attempt, the window would never fill, and the
     // limiter would refuse the same client forever without ever making progress
     // -- or, worse, let it straight back in.
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
     const flooder = "198.51.100.201";
@@ -494,8 +511,8 @@ describe("report flooding", () => {
   });
 
   it("limits one client without silencing everybody else", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -518,8 +535,8 @@ describe("report flooding", () => {
   });
 
   it("lets the client back in once its window has been swept", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
     const client = "198.51.100.204";
@@ -558,8 +575,8 @@ describe("notifying the operator", () => {
   const database = useTestDatabase();
 
   it("emails the configured address with the subject, the reason, and a link", async () => {
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db, "ops@pachka.example");
     const { deps, mailer } = depsFor(database.db);
 
@@ -593,9 +610,9 @@ describe("notifying the operator", () => {
     // The spec scenario, and the assertion is on the report row rather than on
     // the mailer: what has to survive a dead SMTP host is the queue item, not
     // the call.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin D.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin D.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps, mailer } = depsFor(database.db);
     mailer.failWith = "smtp: connection refused";
@@ -632,8 +649,8 @@ describe("notifying the operator", () => {
     // `moderation.operator_email` ships with an empty default and "Must be set
     // before launch". Silently reporting success would hide that until the
     // first report nobody answered.
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps, mailer } = depsFor(database.db);
 
     const result = await fileReport(deps, {
@@ -662,11 +679,11 @@ describe("reports through the data API", () => {
     // by posting straight to /rest/v1/reports with the key from the browser
     // bundle. This is the assertion that the flood control cannot be walked
     // around rather than merely implemented.
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
 
     await expect(
-      asAnon(database.db, (tx) =>
+      asAnon(database.dataApi, (tx) =>
         tx.query(
           `insert into reports (subject_type, artwork_id, reason, reporter_fingerprint)
            values ('artwork', $1, 'other', repeat('a', 64))`,
@@ -683,8 +700,8 @@ describe("reports through the data API", () => {
     // them." An artist who can read their own reports can correlate the timing
     // against their own visitor logs, and an anonymous reporter stops being
     // anonymous.
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -694,8 +711,7 @@ describe("reports through the data API", () => {
       clientId: "203.0.113.40",
     });
 
-    const rows = await asUser(
-      database.db,
+    const rows = await asUser(database.dataApi,
       artistId,
       async (tx) => (await tx.query("select * from reports")).rows,
       // Everything the artist can put in their own token, which they rewrite at
@@ -707,9 +723,9 @@ describe("reports through the data API", () => {
   });
 
   it("is readable by an admin, so the check above is not vacuous", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin E.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin E.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
@@ -719,8 +735,7 @@ describe("reports through the data API", () => {
       clientId: "203.0.113.41",
     });
 
-    const rows = await asUser(
-      database.db,
+    const rows = await asUser(database.dataApi,
       adminId,
       async (tx) => (await tx.query("select * from reports")).rows,
     );
@@ -732,8 +747,8 @@ describe("reports through the data API", () => {
     // A takedown is justified by the report that prompted it, so a reason that
     // can be edited afterwards justifies nothing. The trigger refuses even the
     // privileged connection the application itself runs on.
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 

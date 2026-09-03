@@ -6,13 +6,21 @@
  * of migrating: the ledger, idempotency, drift detection, and the fact that a
  * failed migration leaves nothing behind.
  */
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Client } from "pg";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createTestDatabase, type TestDatabase } from "../harness";
-import { loadMigrations, migrate, migrationStatus } from "@/shared/db";
+import {
+  asAnon,
+  asUser,
+  createTestDatabase,
+  privilegedUrl,
+  withPrivilegedConnection,
+  type TestDatabase,
+} from "../harness";
+import { LEDGER_TABLE, loadMigrations, migrate, migrationStatus } from "@/shared/db";
 
 /**
  * A scratch migrations directory. The real `db/migrations` is already applied
@@ -33,7 +41,15 @@ describe("migration runner", () => {
 
   beforeEach(async () => {
     database = await createTestDatabase();
-    client = new Client({ connectionString: database.url });
+    // The runner creates tables, so it connects the way a deploy does: with
+    // credentials that own the schema. The application role deliberately has no
+    // CREATE on `public`.
+    client = new Client({
+      connectionString: privilegedUrl(
+        database,
+        "applying schema, which the migration runner does with owner credentials",
+      ),
+    });
     await client.connect();
   });
 
@@ -78,7 +94,7 @@ describe("migration runner", () => {
 
     expect(second).toEqual([]);
     const { rows } = await client.query<{ count: string }>(
-      "select count(*)::text as count from schema_migrations where name = '20260101T000000_create_widgets.sql'",
+      `select count(*)::text as count from ${LEDGER_TABLE} where name = '20260101T000000_create_widgets.sql'`,
     );
     expect(rows[0]?.count).toBe("1");
   });
@@ -115,7 +131,7 @@ describe("migration runner", () => {
     // The database was cloned from the migrated template, so its ledger holds
     // the real migrations. What must not be there is the one that just failed.
     const ledger = await client.query<{ name: string }>(
-      "select name from schema_migrations where name = '20260101T000000_half_broken.sql'",
+      `select name from ${LEDGER_TABLE} where name = '20260101T000000_half_broken.sql'`,
     );
     expect(ledger.rows).toEqual([]);
   });
@@ -163,8 +179,18 @@ describe("the real migrations", () => {
     // for is that applying the migrations leaves one ledger row per file.
     const onDisk = (await loadMigrations()).map((m) => m.name);
 
-    const { rows } = await database.db.query<{ name: string }>(
-      "select name from schema_migrations order by name",
+    // The ledger belongs to the migration runner, not to the application: it
+    // is written with owner credentials at deploy time and the application role
+    // has no reason to read it. So this reads it the way the runner would.
+    const rows = await withPrivilegedConnection(
+      database,
+      "applying schema, which the migration runner does with owner credentials",
+      async (client) =>
+        (
+          await client.query<{ name: string }>(
+            `select name from ${LEDGER_TABLE} order by name`,
+          )
+        ).rows,
     );
 
     expect(rows.map((r) => r.name)).toEqual([...onDisk].sort());
@@ -227,16 +253,12 @@ describe("row-level security on app_config", () => {
     // and that key ships in the client bundle. `anon` therefore has no grant at
     // all — SECURITY.md S1-16.
     await expect(
-      database.db.withTransaction(async (tx) => {
-        await tx.query("set local role anon");
-        await tx.query("select key from app_config");
-      }),
+      asAnon(database.dataApi, (tx) => tx.query("select key from app_config")),
     ).rejects.toThrow(/permission denied/i);
   });
 
   it("shows a signed-in user only the presentational rows", async () => {
-    const visible = await database.db.withTransaction(async (tx) => {
-      await tx.query("set local role authenticated");
+    const visible = await asUser(database.dataApi, randomUUID(), async (tx) => {
       const { rows } = await tx.query<{ key: string }>("select key from app_config");
       return rows.map((r) => r.key);
     });
@@ -249,12 +271,9 @@ describe("row-level security on app_config", () => {
 
   it("refuses writes from a signed-in user", async () => {
     await expect(
-      database.db.withTransaction(async (tx) => {
-        await tx.query("set local role authenticated");
-        await tx.query(
-          "update app_config set value = '0'::jsonb where key = 'returns.window_days'",
-        );
-      }),
+      asUser(database.dataApi, randomUUID(), (tx) =>
+        tx.query("update app_config set value = '0'::jsonb where key = 'returns.window_days'"),
+      ),
     ).rejects.toThrow();
 
     const row = await database.db.one<{ value: string }>(

@@ -309,7 +309,7 @@ describe("the artist profile through the data API", () => {
     const { d, userId } = await registeredBuyer(database.db);
     await upgradeToArtist(d, userId, UPGRADE);
 
-    const rows = await asAnon(database.db, async (tx) => {
+    const rows = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query("select * from artist_profiles");
       return result.rows;
     });
@@ -322,7 +322,7 @@ describe("the artist profile through the data API", () => {
     await upgradeToArtist(d, userId, UPGRADE);
     await giveArtistAnArtwork(database.db, userId);
 
-    const rows = await asAnon(database.db, async (tx) => {
+    const rows = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query<{ display_name: string }>(
         "select display_name from artist_profiles",
       );
@@ -338,7 +338,7 @@ describe("the artist profile through the data API", () => {
     await giveArtistAnArtwork(database.db, userId);
     await suspendAccount(d, userId, "Repeated takedowns");
 
-    const rows = await asAnon(database.db, async (tx) => {
+    const rows = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query("select * from artist_profiles");
       return result.rows;
     });
@@ -353,7 +353,7 @@ describe("the artist profile through the data API", () => {
     await upgradeToArtist(d, userId, UPGRADE);
 
     await expect(
-      asUser(database.db, userId, (tx) =>
+      asUser(database.dataApi, userId, (tx) =>
         tx.query("update artist_profiles set biography = 'call me on 0501234567'"),
       ),
     ).rejects.toThrow(/permission denied/i);

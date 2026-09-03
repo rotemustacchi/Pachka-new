@@ -38,8 +38,23 @@ async function seedArtist(
   return id;
 }
 
-/** A row that satisfies `artworks_published_is_complete`, in whichever status is asked for. */
+/**
+ * A row that satisfies `artworks_published_is_complete`, in whichever status is
+ * asked for.
+ *
+ * `removed` is reached by taking a published row down, not by inserting one
+ * that arrived removed, because that is the only way a removed artwork exists.
+ * `artworks_server_insert` refuses a row that is born removed and
+ * `artworks_server_update` refuses to touch one afterwards -- ARCHITECTURE.md
+ * makes removal terminal for every role -- so this fixture walks the same
+ * one-way edge a takedown does.
+ */
 async function seedArtwork(db: Database, artistId: string, status: string): Promise<string> {
+  if (status === "removed") {
+    const id = await seedArtwork(db, artistId, "published");
+    await db.query("update artworks set status = 'removed' where id = $1", [id]);
+    return id;
+  }
   const complete = status === "published" || status === "sold";
   const row = await db.one<{ id: string }>(
     `insert into artworks (
@@ -222,7 +237,7 @@ describe("the PostgREST data API, holding only the anon key", () => {
       seedArtwork(database.db, artistId, "removed"),
     ]);
 
-    const visible = await asAnon(database.db, async (tx) => {
+    const visible = await asAnon(database.dataApi, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artworks");
       return rows.map((row) => row.id);
     });
@@ -235,7 +250,7 @@ describe("the PostgREST data API, holding only the anon key", () => {
     const artistId = await seedArtist(database.db);
     const published = await seedArtwork(database.db, artistId, "published");
 
-    const visible = await asAnon(database.db, async (tx) => {
+    const visible = await asAnon(database.dataApi, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artworks");
       return rows.map((row) => row.id);
     });
@@ -254,7 +269,7 @@ describe("the PostgREST data API, holding only the anon key", () => {
     const artistId = await seedArtist(database.db, { suspended: true });
     await seedArtwork(database.db, artistId, "published");
 
-    const visible = await asAnon(database.db, async (tx) => {
+    const visible = await asAnon(database.dataApi, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artworks");
       return rows.map((row) => row.id);
     });
@@ -270,7 +285,7 @@ describe("the PostgREST data API, holding only the anon key", () => {
       artistId,
     ]);
 
-    const visible = await asAnon(database.db, async (tx) => {
+    const visible = await asAnon(database.dataApi, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artworks");
       return rows.map((row) => row.id);
     });
@@ -283,7 +298,7 @@ describe("the PostgREST data API, holding only the anon key", () => {
     const artistId = await seedArtist(database.db);
 
     await expect(
-      asAnon(database.db, (tx) =>
+      asAnon(database.dataApi, (tx) =>
         tx.query("insert into artworks (artist_id) values ($1)", [artistId]),
       ),
     ).rejects.toMatchObject({ code: "42501" });
@@ -297,7 +312,7 @@ describe("the PostgREST data API, holding only the anon key", () => {
       [draftId, `${draftId}/original.jpg`],
     );
 
-    const visible = await asAnon(database.db, async (tx) => {
+    const visible = await asAnon(database.dataApi, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artwork_images");
       return rows;
     });
@@ -331,7 +346,7 @@ describe("a signed-in buyer who is not the artist", () => {
     await seedArtwork(database.db, artistId, "removed");
     const published = await seedArtwork(database.db, artistId, "published");
 
-    const visible = await asUser(database.db, buyerId, async (tx) => {
+    const visible = await asUser(database.dataApi, buyerId, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artworks");
       return rows.map((row) => row.id);
     });
@@ -348,7 +363,7 @@ describe("a signed-in buyer who is not the artist", () => {
     const artworkId = await seedArtwork(database.db, artistId, "published");
 
     await expect(
-      asUser(database.db, buyerId, (tx) =>
+      asUser(database.dataApi, buyerId, (tx) =>
         tx.query("update artworks set price_agorot = 1 where id = $1", [artworkId]),
       ),
     ).rejects.toMatchObject({ code: "42501" });
@@ -369,7 +384,7 @@ describe("an artist looking at their own listings", () => {
       ]),
     );
 
-    const visible = await asUser(database.db, artistId, async (tx) => {
+    const visible = await asUser(database.dataApi, artistId, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artworks");
       return rows.map((row) => row.id);
     });
@@ -386,13 +401,13 @@ describe("an artist looking at their own listings", () => {
     const artistId = await seedArtist(database.db);
     const unlisted = await seedArtwork(database.db, artistId, "unlisted");
 
-    const artistSees = await asUser(database.db, artistId, async (tx) => {
+    const artistSees = await asUser(database.dataApi, artistId, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artworks where id = $1", [
         unlisted,
       ]);
       return rows.map((row) => row.id);
     });
-    const anonSees = await asAnon(database.db, async (tx) => {
+    const anonSees = await asAnon(database.dataApi, async (tx) => {
       const { rows } = await tx.query<{ id: string }>("select id from artworks where id = $1", [
         unlisted,
       ]);
@@ -411,7 +426,7 @@ describe("an artist looking at their own listings", () => {
     // to `published` that runs no completeness check, no taxonomy cap, and no
     // lifecycle edge.
     await expect(
-      asUser(database.db, artistId, (tx) =>
+      asUser(database.dataApi, artistId, (tx) =>
         tx.query("update artworks set status = 'published' where id = $1", [draftId]),
       ),
     ).rejects.toMatchObject({ code: "42501" });

@@ -9,6 +9,7 @@ import { Client } from "pg";
 import type { TestProject } from "vitest/node";
 import { startCluster, type Cluster } from "./cluster";
 import { migrate } from "@/shared/db/migrations";
+import { ensureLoginRoles, urlAsRole, APP_ROLE, AUTHENTICATOR_ROLE } from "./login-roles";
 import { databaseUrl } from "./url";
 
 export const TEMPLATE_DATABASE = "pachka_template";
@@ -45,7 +46,15 @@ export default async function setup(project: TestProject) {
     await template.end();
   }
 
+  // Only now, because the roles below are granted membership in `service_role`,
+  // `anon` and `authenticated` — which the bootstrap migration creates.
+  await ensureLoginRoles(cluster.adminUrl);
+
+  // The superuser URL is provided for exactly two things: creating and dropping
+  // the per-test databases, and `privileged.ts`. Tests get the other two.
   project.provide("pachkaAdminUrl", cluster.adminUrl);
+  project.provide("pachkaAppUrl", urlAsRole(cluster.adminUrl, APP_ROLE));
+  project.provide("pachkaDataApiUrl", urlAsRole(cluster.adminUrl, AUTHENTICATOR_ROLE));
   project.provide("pachkaTemplate", TEMPLATE_DATABASE);
 
   return async () => {

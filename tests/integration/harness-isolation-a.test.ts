@@ -13,7 +13,7 @@
  * earlier test cannot be observed by a later one.
  */
 import { describe, expect, it } from "vitest";
-import { useTestDatabase } from "../harness";
+import { defineScratchTable, useTestDatabase } from "../harness";
 
 const SHARED_KEY = "test.harness.isolation_probe";
 const SHARED_TABLE = "harness_isolation_probe";
@@ -34,7 +34,11 @@ describe("harness isolation (A)", () => {
       "insert into app_config (key, value, value_type, description) values ($1, $2, 'string', $3)",
       [SHARED_KEY, JSON.stringify("written-by-A"), "written by isolation test A"],
     );
-    await database.db.query(`create table ${SHARED_TABLE} (id integer primary key)`);
+    await defineScratchTable(
+      database,
+      SHARED_TABLE,
+      `create table ${SHARED_TABLE} (id integer primary key)`,
+    );
     await database.db.query(`insert into ${SHARED_TABLE} (id) values (1)`);
 
     const probe = await database.db.one<{ value: string }>(

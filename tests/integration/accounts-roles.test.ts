@@ -12,7 +12,7 @@
  * `request.jwt.claims`, which is the same session setting Supabase populates.
  */
 import { describe, expect, it } from "vitest";
-import { asUser, useTestDatabase } from "../harness";
+import { asUser, grantAdminRole, useTestDatabase } from "../harness";
 import type { Database } from "@/shared/db";
 
 /** Everything a user might plausibly stuff into their own metadata. */
@@ -40,8 +40,7 @@ describe("a buyer who has rewritten their own user_metadata to claim admin", () 
   it("is not an admin according to the only thing that decides that", async () => {
     const buyerId = await seedBuyer(database.db);
 
-    const isAdmin = await asUser(
-      database.db,
+    const isAdmin = await asUser(database.dataApi,
       buyerId,
       async (tx) => {
         const row = await tx.one<{ is_admin: boolean }>(
@@ -59,8 +58,7 @@ describe("a buyer who has rewritten their own user_metadata to claim admin", () 
     const buyerId = await seedBuyer(database.db);
     const otherId = await seedBuyer(database.db, "Ori K.");
 
-    const rows = await asUser(
-      database.db,
+    const rows = await asUser(database.dataApi,
       buyerId,
       async (tx) => {
         const result = await tx.query("select * from user_roles where user_id = $1", [otherId]);
@@ -76,8 +74,7 @@ describe("a buyer who has rewritten their own user_metadata to claim admin", () 
     const buyerId = await seedBuyer(database.db);
 
     await expect(
-      asUser(
-        database.db,
+      asUser(database.dataApi,
         buyerId,
         (tx) => tx.query("select * from artist_payout_details"),
         FORGED_ADMIN_CLAIMS,
@@ -89,8 +86,7 @@ describe("a buyer who has rewritten their own user_metadata to claim admin", () 
     const buyerId = await seedBuyer(database.db);
 
     await expect(
-      asUser(
-        database.db,
+      asUser(database.dataApi,
         buyerId,
         (tx) =>
           tx.query(
@@ -114,7 +110,7 @@ describe("granting yourself a role through the data API", () => {
     const buyerId = await seedBuyer(database.db);
 
     await expect(
-      asUser(database.db, buyerId, (tx) =>
+      asUser(database.dataApi, buyerId, (tx) =>
         tx.query("insert into user_roles (user_id, role) values (auth.uid(), 'admin')"),
       ),
     ).rejects.toThrow(/permission denied/i);
@@ -132,7 +128,7 @@ describe("granting yourself a role through the data API", () => {
     const buyerId = await seedBuyer(database.db);
 
     await expect(
-      asUser(database.db, buyerId, (tx) =>
+      asUser(database.dataApi, buyerId, (tx) =>
         tx.query("insert into user_roles (user_id, role) values (auth.uid(), 'artist')"),
       ),
     ).rejects.toThrow(/permission denied/i);
@@ -148,7 +144,7 @@ describe("granting yourself a role through the data API", () => {
     const buyerId = await seedBuyer(database.db);
 
     await expect(
-      asUser(database.db, buyerId, (tx) => tx.query("delete from user_roles where user_id = auth.uid()")),
+      asUser(database.dataApi, buyerId, (tx) => tx.query("delete from user_roles where user_id = auth.uid()")),
     ).rejects.toThrow(/permission denied/i);
   });
 });
@@ -160,11 +156,11 @@ describe("a genuine admin, held in user_roles", () => {
     // Without this the four assertions above would all pass against a helper
     // that returned a constant.
     const adminId = await seedBuyer(database.db, "Operator");
-    await database.db.query("insert into user_roles (user_id, role) values ($1, 'admin')", [
-      adminId,
-    ]);
+    // Granting `admin` is a manual database operation (SECURITY.md S0-2 item 4),
+    // and the policy admits only 'buyer' and 'artist', so it is seeded out of band.
+    await grantAdminRole(database, adminId);
 
-    const isAdmin = await asUser(database.db, adminId, async (tx) => {
+    const isAdmin = await asUser(database.dataApi, adminId, async (tx) => {
       const row = await tx.one<{ is_admin: boolean }>("select accounts.auth_is_admin() as is_admin");
       return row.is_admin;
     });
@@ -174,12 +170,12 @@ describe("a genuine admin, held in user_roles", () => {
 
   it("reads roles across accounts, which a buyer cannot", async () => {
     const adminId = await seedBuyer(database.db, "Operator");
-    await database.db.query("insert into user_roles (user_id, role) values ($1, 'admin')", [
-      adminId,
-    ]);
+    // Granting `admin` is a manual database operation (SECURITY.md S0-2 item 4),
+    // and the policy admits only 'buyer' and 'artist', so it is seeded out of band.
+    await grantAdminRole(database, adminId);
     const otherId = await seedBuyer(database.db, "Ori K.");
 
-    const rows = await asUser(database.db, adminId, async (tx) => {
+    const rows = await asUser(database.dataApi, adminId, async (tx) => {
       const result = await tx.query<{ role: string }>(
         "select role from user_roles where user_id = $1",
         [otherId],
@@ -203,7 +199,7 @@ describe("a suspended account", () => {
       buyerId,
     ]);
 
-    const active = await asUser(database.db, buyerId, async (tx) => {
+    const active = await asUser(database.dataApi, buyerId, async (tx) => {
       const row = await tx.one<{ active: boolean }>("select accounts.auth_is_active() as active");
       return row.active;
     });
@@ -220,7 +216,7 @@ describe("a suspended account", () => {
       buyerId,
     ]);
 
-    const active = await asUser(database.db, buyerId, async (tx) => {
+    const active = await asUser(database.dataApi, buyerId, async (tx) => {
       const row = await tx.one<{ active: boolean }>("select accounts.auth_is_active() as active");
       return row.active;
     });

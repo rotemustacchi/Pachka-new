@@ -15,7 +15,7 @@
  * the real table, tested against real Postgres.
  */
 import { describe, expect, it } from "vitest";
-import { asAnon, useTestDatabase } from "../harness";
+import { asAnon, useTestDatabase, withPrivilegedConnection, type TestDatabase } from "../harness";
 import { FakeAuthGateway } from "../fakes/auth-gateway";
 import {
   denyAllOrders,
@@ -346,7 +346,7 @@ describe("a review whose order is returned", () => {
     await submitReview(database.db, allowAllOrders, { orderId: ORDER, artistId, buyerId, rating: 5 });
     await withdrawReviewsForReturnedOrder(database.db, ORDER);
 
-    const rows = await asAnon(database.db, async (tx) => {
+    const rows = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query("select * from reviews");
       return result.rows;
     });
@@ -439,7 +439,7 @@ describe("reviews through the data API", () => {
     await submitReview(database.db, allowAllOrders, { orderId: ORDER, artistId, buyerId, rating: 5 });
     await giveArtistAnArtwork(database.db, artistId);
 
-    const rows = await asAnon(database.db, async (tx) => {
+    const rows = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query<{ rating: number }>("select rating from reviews");
       return result.rows;
     });
@@ -455,7 +455,7 @@ describe("reviews through the data API", () => {
 
     const { asUser } = await import("../harness");
     await expect(
-      asUser(database.db, buyerId, (tx) =>
+      asUser(database.dataApi, buyerId, (tx) =>
         tx.query(
           "insert into reviews (order_id, artist_id, buyer_id, rating) values ($1, $2, auth.uid(), 5)",
           [ORDER, artistId],
@@ -475,7 +475,7 @@ describe("reviews through the data API", () => {
     await submitReview(database.db, allowAllOrders, { orderId: ORDER, artistId, buyerId, rating: 5 });
     await giveArtistAnArtwork(database.db, artistId);
 
-    const names = await asAnon(database.db, async (tx) => {
+    const names = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query<{ display_name: string }>(
         "select display_name from profiles where user_id = $1",
         [buyerId],
@@ -494,7 +494,7 @@ describe("reviews through the data API", () => {
 
     await withdrawReviewsForReturnedOrder(database.db, ORDER);
 
-    const names = await asAnon(database.db, async (tx) => {
+    const names = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query<{ display_name: string }>(
         "select display_name from profiles where user_id = $1",
         [buyerId],
@@ -511,7 +511,7 @@ describe("reviews through the data API", () => {
     await submitReview(database.db, allowAllOrders, { orderId: ORDER, artistId, buyerId, rating: 5 });
     await suspendAccount(deps(database.db), artistId, "Repeated takedowns");
 
-    const rows = await asAnon(database.db, async (tx) => {
+    const rows = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query("select * from reviews");
       return result.rows;
     });
@@ -532,23 +532,44 @@ describe("the SQL eligibility reader", () => {
    * do arrive, whoever notices these tests failing updates this helper to build
    * a delivered order the real way.
    */
-  async function createStandInOrders(db: Database): Promise<void> {
+  async function createStandInOrders(database: TestDatabase): Promise<void> {
+    const db = database.db;
     const present = await db.one<{ present: boolean }>(
       "select to_regclass('public.orders') is not null as present",
     );
     if (present.present) return;
 
-    await db.query(
-      "create table orders (id uuid primary key, buyer_id uuid not null, status text not null)",
+    // Created with owner credentials, like any other table, then given the
+    // same shape every real table has: RLS on and forced, nothing for anon, and
+    // an explicit policy for the role the server connects as. A stand-in that
+    // was readable without a policy would be a softer table than the one it
+    // stands in for, and the eligibility reader below would be proved against
+    // conditions `orders` will not actually offer it.
+    await withPrivilegedConnection(
+      database,
+      "applying schema, which the migration runner does with owner credentials",
+      async (client) => {
+        await client.query(
+          "create table orders (id uuid primary key, buyer_id uuid not null, status text not null)",
+        );
+        await client.query(
+          "create table fulfilments (id uuid primary key default gen_random_uuid(), order_id uuid not null, artist_id uuid not null)",
+        );
+        for (const table of ["orders", "fulfilments"]) {
+          await client.query(`alter table ${table} enable row level security`);
+          await client.query(`alter table ${table} force row level security`);
+          await client.query(
+            `create policy ${table}_stand_in on ${table} for select to anon using (false)`,
+          );
+          await client.query(
+            `create policy ${table}_server on ${table} for all to service_role using (true) with check (true)`,
+          );
+          await client.query(
+            `grant select, insert, update, delete on ${table} to service_role`,
+          );
+        }
+      },
     );
-    await db.query(
-      "create table fulfilments (id uuid primary key default gen_random_uuid(), order_id uuid not null, artist_id uuid not null)",
-    );
-    for (const table of ["orders", "fulfilments"]) {
-      await db.query(`alter table ${table} enable row level security`);
-      await db.query(`alter table ${table} force row level security`);
-      await db.query(`create policy ${table}_stand_in on ${table} for select to anon using (false)`);
-    }
   }
 
   it("fails closed while the orders tables do not exist", async () => {
@@ -567,7 +588,7 @@ describe("the SQL eligibility reader", () => {
   it("allows a buyer with a delivered order from that artist", async () => {
     const artistId = await artistAccount(database.db);
     const buyerId = await account(database.db, "michal@example.com", "Michal R.");
-    await createStandInOrders(database.db);
+    await createStandInOrders(database);
     await database.db.query("insert into orders (id, buyer_id, status) values ($1, $2, 'delivered')", [
       ORDER,
       buyerId,
@@ -589,7 +610,7 @@ describe("the SQL eligibility reader", () => {
   it("refuses when the order has not reached delivered", async () => {
     const artistId = await artistAccount(database.db);
     const buyerId = await account(database.db, "michal@example.com", "Michal R.");
-    await createStandInOrders(database.db);
+    await createStandInOrders(database);
     await database.db.query("insert into orders (id, buyer_id, status) values ($1, $2, 'shipped')", [
       ORDER,
       buyerId,
@@ -612,7 +633,7 @@ describe("the SQL eligibility reader", () => {
     const artistId = await artistAccount(database.db);
     const buyerId = await account(database.db, "michal@example.com", "Michal R.");
     const strangerId = await account(database.db, "ori@example.com", "Ori K.");
-    await createStandInOrders(database.db);
+    await createStandInOrders(database);
     await database.db.query("insert into orders (id, buyer_id, status) values ($1, $2, 'delivered')", [
       ORDER,
       buyerId,
@@ -635,7 +656,7 @@ describe("the SQL eligibility reader", () => {
     const artistId = await artistAccount(database.db);
     const otherArtist = await account(database.db, "dana@example.com", "Dana L.");
     const buyerId = await account(database.db, "michal@example.com", "Michal R.");
-    await createStandInOrders(database.db);
+    await createStandInOrders(database);
     await database.db.query("insert into orders (id, buyer_id, status) values ($1, $2, 'delivered')", [
       ORDER,
       buyerId,

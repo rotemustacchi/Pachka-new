@@ -23,7 +23,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { useTestDatabase } from "../harness";
+import {
+  defineGuardedScratchTable,
+  grantAdminRole,
+  useTestDatabase,
+  type TestDatabase,
+} from "../harness";
 import { FakeAuthGateway } from "../fakes/auth-gateway";
 import {
   fileReport,
@@ -46,7 +51,12 @@ class FakeMailer implements Mailer {
   }
 }
 
-async function seedAccount(db: Database, roles: readonly string[], name: string): Promise<string> {
+async function seedAccount(
+  database: TestDatabase,
+  roles: readonly string[],
+  name: string,
+): Promise<string> {
+  const db = database.db;
   const { rows } = await db.query<{ user_id: string }>(
     "insert into profiles (user_id, display_name) values (gen_random_uuid(), $1) returning user_id",
     [name],
@@ -54,18 +64,24 @@ async function seedAccount(db: Database, roles: readonly string[], name: string)
   const id = rows[0]!.user_id;
   await db.query("insert into account_status (user_id, verified_at) values ($1, now())", [id]);
   for (const role of roles) {
-    await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
+    // `admin` is not grantable through the application (SECURITY.md S0-2 item
+    // 4), and `user_roles_server_insert` enforces that, so it is seeded the way
+    // an operator would grant it: out of band, with database credentials.
+    if (role === "admin") await grantAdminRole(database, id);
+    else await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
   }
   return id;
 }
 
-async function seedArtist(db: Database, name = "Tamar S."): Promise<string> {
-  const id = await seedAccount(db, ["buyer", "artist"], name);
+async function seedArtist(database: TestDatabase, name = "Tamar S."): Promise<string> {
+  const db = database.db;
+  const id = await seedAccount(database, ["buyer", "artist"], name);
   await db.query("insert into artist_profiles (user_id, display_name) values ($1, $2)", [id, name]);
   return id;
 }
 
-async function seedPublishedArtwork(db: Database, artistId: string, title = "Harbour Light") {
+async function seedPublishedArtwork(database: TestDatabase, artistId: string, title = "Harbour Light") {
+  const db = database.db;
   const { rows } = await db.query<{ id: string }>(
     `insert into artworks (
        artist_id, status, title, description, price_agorot,
@@ -88,17 +104,24 @@ function depsFor(db: Database, extra: Partial<ModerationDeps> = {}): ModerationD
 }
 
 /** A real stand-in for `upload_events`, until the uploads module ships. */
-async function createFlaggedUploads(db: Database): Promise<FlaggedUploadSource> {
-  await db.query(`
-    create table stand_in_upload_events (
+async function createFlaggedUploads(database: TestDatabase): Promise<FlaggedUploadSource> {
+  // Created with owner credentials, then given the shape the real
+  // `upload_events` will have to have: RLS on, and an explicit policy for the
+  // role the server connects as. Enabling RLS without a policy denies
+  // everything, which used to be invisible here because the harness connected
+  // as a superuser and bypassed it -- the queue would have come back empty in
+  // production while this test passed.
+  await defineGuardedScratchTable(
+    database,
+    "stand_in_upload_events",
+    `create table stand_in_upload_events (
       id         uuid primary key default gen_random_uuid(),
       artwork_id uuid not null references artworks (id),
       verdict    text not null,
       note       text not null,
       created_at timestamptz not null default now()
-    )
-  `);
-  await db.query("alter table stand_in_upload_events enable row level security");
+    )`,
+  );
 
   return {
     async flaggedForReview(sql: Sql, limit: number) {
@@ -126,7 +149,8 @@ async function createFlaggedUploads(db: Database): Promise<FlaggedUploadSource> 
  * being -- the reason set, the rate limit, the hashing, the notification -- is
  * tested against the real `fileReport` in moderation-reports.test.ts.
  */
-async function seedReportAt(db: Database, artworkId: string, reason: string, ago: string) {
+async function seedReportAt(database: TestDatabase, artworkId: string, reason: string, ago: string) {
+  const db = database.db;
   const { rows } = await db.query<{ id: string }>(
     `insert into reports (subject_type, artwork_id, reason, reporter_fingerprint, created_at)
      values ('artwork', $1, $2, encode(sha256($3::bytea), 'hex'), now() - $4::interval)
@@ -146,10 +170,10 @@ describe("who can see the queue", () => {
   const database = useTestDatabase();
 
   it("returns not-found to an account without the admin role", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin A.");
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer B.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin A.");
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer B.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "not_original_work", "192.0.2.60");
@@ -164,9 +188,9 @@ describe("who can see the queue", () => {
   });
 
   it("returns not-found to the artist whose work is in the queue", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin C.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin C.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "mass_produced", "192.0.2.61");
@@ -176,9 +200,9 @@ describe("who can see the queue", () => {
   });
 
   it("returns not-found to an anonymous caller and to an unknown account", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin D.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin D.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "other", "192.0.2.62");
@@ -189,10 +213,10 @@ describe("who can see the queue", () => {
   });
 
   it("returns not-found to an admin whose own account has been suspended", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin E.");
-    const otherAdminId = await seedAccount(database.db, ["admin"], "Admin F.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin E.");
+    const otherAdminId = await seedAccount(database, ["admin"], "Admin F.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "other", "192.0.2.63");
@@ -210,7 +234,7 @@ describe("who can see the queue", () => {
     // The distinction is the requirement. A 403 confirms the surface exists and
     // that the caller's account is real; a 404 tells them nothing. This asserts
     // the kind, because that is what `httpStatusFor` turns into the status code.
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer G.");
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer G.");
     const deps = depsFor(database.db);
 
     const error = await listQueue(deps, buyerId).catch((caught: { kind: string }) => caught);
@@ -224,10 +248,10 @@ describe("what the queue shows", () => {
   const database = useTestDatabase();
 
   it("sorts by recency, newest first", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin H.");
-    const artistId = await seedArtist(database.db);
-    const older = await seedPublishedArtwork(database.db, artistId, "Older");
-    const newer = await seedPublishedArtwork(database.db, artistId, "Newer");
+    const adminId = await seedAccount(database, ["admin"], "Admin H.");
+    const artistId = await seedArtist(database);
+    const older = await seedPublishedArtwork(database, artistId, "Older");
+    const newer = await seedPublishedArtwork(database, artistId, "Newer");
     const deps = depsFor(database.db);
 
     // Seeded with explicit timestamps rather than filed through `fileReport`
@@ -237,8 +261,8 @@ describe("what the queue shows", () => {
     // test -- move a report's `created_at` after it is filed. The filing path
     // is covered in moderation-reports.test.ts; what is under test here is the
     // ordering `listQueue` imposes on rows that already exist.
-    await seedReportAt(database.db, older, "other", "1 hour");
-    await seedReportAt(database.db, newer, "other", "1 minute");
+    await seedReportAt(database, older, "other", "1 hour");
+    await seedReportAt(database, newer, "other", "1 minute");
 
     const queue = await listQueue(deps, adminId);
 
@@ -249,15 +273,15 @@ describe("what the queue shows", () => {
   it("dates a group by its newest report, not its oldest", async () => {
     // A subject reported months ago and again this morning belongs at the top
     // of the queue, not the bottom.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin H2.");
-    const artistId = await seedArtist(database.db);
-    const stale = await seedPublishedArtwork(database.db, artistId, "Stale");
-    const busy = await seedPublishedArtwork(database.db, artistId, "Busy");
+    const adminId = await seedAccount(database, ["admin"], "Admin H2.");
+    const artistId = await seedArtist(database);
+    const stale = await seedPublishedArtwork(database, artistId, "Stale");
+    const busy = await seedPublishedArtwork(database, artistId, "Busy");
     const deps = depsFor(database.db);
 
-    await seedReportAt(database.db, stale, "other", "2 hours");
-    await seedReportAt(database.db, busy, "other", "10 hours");
-    await seedReportAt(database.db, busy, "mass_produced", "1 minute");
+    await seedReportAt(database, stale, "other", "2 hours");
+    await seedReportAt(database, busy, "other", "10 hours");
+    await seedReportAt(database, busy, "mass_produced", "1 minute");
 
     const queue = await listQueue(deps, adminId);
 
@@ -268,13 +292,13 @@ describe("what the queue shows", () => {
   it("shows an upload the pipeline flagged, alongside the reports", async () => {
     // "An upload is flagged because safety screening was unavailable -> it
     // appears in the admin queue for review."
-    const adminId = await seedAccount(database.db, ["admin"], "Admin I.");
-    const artistId = await seedArtist(database.db);
-    const reported = await seedPublishedArtwork(database.db, artistId, "Reported");
-    const flagged = await seedPublishedArtwork(database.db, artistId, "Flagged");
+    const adminId = await seedAccount(database, ["admin"], "Admin I.");
+    const artistId = await seedArtist(database);
+    const reported = await seedPublishedArtwork(database, artistId, "Reported");
+    const flagged = await seedPublishedArtwork(database, artistId, "Flagged");
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
 
-    const uploads = await createFlaggedUploads(database.db);
+    const uploads = await createFlaggedUploads(database);
     const deps = depsFor(database.db, { uploads });
 
     await report(deps, reported, "offensive_content", "192.0.2.72");
@@ -299,7 +323,7 @@ describe("what the queue shows", () => {
   });
 
   it("is empty when nothing is open, rather than failing", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin J.");
+    const adminId = await seedAccount(database, ["admin"], "Admin J.");
     const deps = depsFor(database.db);
 
     expect(await listQueue(deps, adminId)).toEqual([]);
@@ -312,9 +336,9 @@ describe("resolving a queue item", () => {
   it("closes it, leaves the artwork alone, and records the note and the admin", async () => {
     // "An admin dismisses a queue item with a note -> the item closes, the
     // artwork is unaffected, and the note and acting admin are recorded."
-    const adminId = await seedAccount(database.db, ["admin"], "Admin K.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin K.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "not_original_work", "192.0.2.80");
@@ -358,9 +382,9 @@ describe("resolving a queue item", () => {
   });
 
   it("records an audit entry naming the actor and what was decided", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin L.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin L.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "undeclared_ai", "192.0.2.82");
@@ -392,9 +416,9 @@ describe("resolving a queue item", () => {
   });
 
   it("refuses a resolution with no note, and changes nothing", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin M.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin M.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "other", "192.0.2.83");
@@ -416,10 +440,10 @@ describe("resolving a queue item", () => {
   });
 
   it("refuses a non-admin, with not-found, and changes nothing", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin N.");
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer O.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin N.");
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer O.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "other", "192.0.2.84");
@@ -454,10 +478,10 @@ describe("resolving a queue item", () => {
   });
 
   it("refuses a subject with nothing open, so two admins cannot both think they decided it", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin P.");
-    const secondAdminId = await seedAccount(database.db, ["admin"], "Admin Q.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin P.");
+    const secondAdminId = await seedAccount(database, ["admin"], "Admin Q.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "other", "192.0.2.85");
@@ -491,7 +515,7 @@ describe("resolving a queue item", () => {
   });
 
   it("refuses a subject that was never reported", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin R.");
+    const adminId = await seedAccount(database, ["admin"], "Admin R.");
     const deps = depsFor(database.db);
 
     await expect(
@@ -510,9 +534,9 @@ describe("resolving a queue item", () => {
     // entry are one transaction. The note is bounded at 2000 characters on
     // admin_audit.note, so an over-long one fails the audit insert after the
     // reports have already been updated.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin S.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin S.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "other", "192.0.2.86");
@@ -545,9 +569,9 @@ describe("resolving a queue item", () => {
     // quietly re-dismissed with a different note. Asserted here as the
     // observable it protects: the resolution that was recorded is the one that
     // stays recorded.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin T.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin T.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     await setConfig(database.db, "moderation.operator_email", "ops@pachka.example");
     const deps = depsFor(database.db);
     await report(deps, artworkId, "other", "192.0.2.87");

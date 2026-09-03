@@ -10,7 +10,7 @@
  * transactions and asserts exactly one wins.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createTestDatabase, type TestDatabase } from "../harness";
+import { APP_ROLE, createTestDatabase, withPrivilegedConnection, type TestDatabase } from "../harness";
 import { AppError } from "@/shared/errors";
 
 describe("withTransaction", () => {
@@ -18,7 +18,20 @@ describe("withTransaction", () => {
 
   beforeEach(async () => {
     database = await createTestDatabase();
-    await database.db.query("create table probe (id integer primary key, note text)");
+    // `probe` exists only so there is something to transact over. Creating it
+    // needs CREATE on `public`, which the application role deliberately does not
+    // have -- so the scratch table is created with owner credentials and then
+    // handed to the role every assertion below actually runs as. The subject of
+    // this file is `withTransaction`, and `withTransaction` must be exercised on
+    // the connection production uses.
+    await withPrivilegedConnection(
+      database,
+      "applying schema, which the migration runner does with owner credentials",
+      async (client) => {
+        await client.query("create table probe (id integer primary key, note text)");
+        await client.query(`grant select, insert, update, delete on probe to ${APP_ROLE}`);
+      },
+    );
   });
 
   afterEach(async () => {
@@ -145,7 +158,18 @@ describe("SELECT ... FOR UPDATE under genuine concurrency", () => {
     // Stands in for the artwork row the orders module will lock. Availability
     // is derived in the real schema (ARCHITECTURE.md); a single counter here is
     // enough to observe whether the lock serialises the two transactions.
-    await database.db.query("create table unique_item (id integer primary key, sold boolean not null default false)");
+    // Same reasoning as `probe` above: owner credentials to create the table,
+    // the application role for the concurrency the test is actually about.
+    await withPrivilegedConnection(
+      database,
+      "applying schema, which the migration runner does with owner credentials",
+      async (client) => {
+        await client.query(
+          "create table unique_item (id integer primary key, sold boolean not null default false)",
+        );
+        await client.query(`grant select, insert, update, delete on unique_item to ${APP_ROLE}`);
+      },
+    );
     await database.db.query("insert into unique_item (id) values (1)");
   });
 

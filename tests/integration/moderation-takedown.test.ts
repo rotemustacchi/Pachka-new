@@ -23,7 +23,13 @@
  */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { asAnon, useTestDatabase } from "../harness";
+import {
+  asAnon,
+  defineGuardedScratchTable,
+  grantAdminRole,
+  useTestDatabase,
+  type TestDatabase,
+} from "../harness";
 import { FakeAuthGateway } from "../fakes/auth-gateway";
 import {
   canTransition,
@@ -51,7 +57,12 @@ class FakeMailer implements Mailer {
   }
 }
 
-async function seedAccount(db: Database, roles: readonly string[], name: string): Promise<string> {
+async function seedAccount(
+  database: TestDatabase,
+  roles: readonly string[],
+  name: string,
+): Promise<string> {
+  const db = database.db;
   const { rows } = await db.query<{ user_id: string }>(
     "insert into profiles (user_id, display_name) values (gen_random_uuid(), $1) returning user_id",
     [name],
@@ -59,13 +70,18 @@ async function seedAccount(db: Database, roles: readonly string[], name: string)
   const id = rows[0]!.user_id;
   await db.query("insert into account_status (user_id, verified_at) values ($1, now())", [id]);
   for (const role of roles) {
-    await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
+    // `admin` is not grantable through the application (SECURITY.md S0-2 item
+    // 4), and `user_roles_server_insert` enforces that, so it is seeded the way
+    // an operator would grant it: out of band, with database credentials.
+    if (role === "admin") await grantAdminRole(database, id);
+    else await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
   }
   return id;
 }
 
-async function seedArtist(db: Database, name = "Noa B.", email = "noa@example.com") {
-  const id = await seedAccount(db, ["buyer", "artist"], name);
+async function seedArtist(database: TestDatabase, name = "Noa B.", email = "noa@example.com") {
+  const db = database.db;
+  const id = await seedAccount(database, ["buyer", "artist"], name);
   await db.query("insert into artist_profiles (user_id, display_name) values ($1, $2)", [id, name]);
   await db.query("insert into artist_contact_details (user_id, email) values ($1, $2)", [
     id,
@@ -82,7 +98,8 @@ async function seedArtist(db: Database, name = "Noa B.", email = "noa@example.co
  * thing honestly is the price of testing against the real constraints instead
  * of a relaxed copy of them.
  */
-async function seedPublishedArtwork(db: Database, artistId: string, title = "Night Market") {
+async function seedPublishedArtwork(database: TestDatabase, artistId: string, title = "Night Market") {
+  const db = database.db;
   const { rows } = await db.query<{ id: string }>(
     `insert into artworks (
        artist_id, status, title, description, price_agorot,
@@ -114,18 +131,20 @@ interface StandInOrders {
   snapshot(artworkId: string): Promise<Array<Record<string, unknown>>>;
 }
 
-async function createStandInOrders(db: Database): Promise<StandInOrders> {
-  await db.query(`
-    create table stand_in_reservations (
+async function createStandInOrders(database: TestDatabase): Promise<StandInOrders> {
+  await defineGuardedScratchTable(
+    database,
+    "stand_in_reservations",
+    `create table stand_in_reservations (
       id         uuid primary key default gen_random_uuid(),
       artwork_id uuid not null references artworks (id),
       buyer_id   uuid not null references profiles (user_id),
       units      integer not null default 1,
       state      text not null,
       created_at timestamptz not null default now()
-    )
-  `);
-  await db.query("alter table stand_in_reservations enable row level security");
+    )`,
+  );
+  const db = database.db;
 
   const demandFor = async (sql: Sql, artworkId: string): Promise<InventoryDemand> => {
     const row = await sql.one<{ reserved: string; sold: string }>(
@@ -172,14 +191,14 @@ describe("an admin removing an artwork", () => {
   const database = useTestDatabase();
 
   it("moves it to removed and takes it off every public surface", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin A.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin A.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps } = depsFor(database.db);
 
     // Visible before, on the surface that actually matters: the data API an
     // anonymous visitor reaches with the key from the browser bundle.
-    const before = await asAnon(database.db, async (tx) =>
+    const before = await asAnon(database.dataApi, async (tx) =>
       (await tx.query("select id from artworks where id = $1", [artworkId])).rows,
     );
     expect(before).toHaveLength(1);
@@ -202,7 +221,7 @@ describe("an admin removing an artwork", () => {
 
     // Gone from the data API, gone from the catalog and the matchmaker, which
     // both read through the same visibility predicate.
-    const after = await asAnon(database.db, async (tx) =>
+    const after = await asAnon(database.dataApi, async (tx) =>
       (await tx.query("select id from artworks where id = $1", [artworkId])).rows,
     );
     expect(after).toEqual([]);
@@ -210,9 +229,9 @@ describe("an admin removing an artwork", () => {
   });
 
   it("notifies the artist with the reason", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin B.");
-    const artistId = await seedArtist(database.db, "Dana P.", "dana@example.com");
-    const artworkId = await seedPublishedArtwork(database.db, artistId, "Quiet Harbour");
+    const adminId = await seedAccount(database, ["admin"], "Admin B.");
+    const artistId = await seedArtist(database, "Dana P.", "dana@example.com");
+    const artworkId = await seedPublishedArtwork(database, artistId, "Quiet Harbour");
     const { deps, mailer } = depsFor(database.db);
 
     const result = await takeDownArtwork(deps, {
@@ -231,9 +250,9 @@ describe("an admin removing an artwork", () => {
   });
 
   it("stands even when the artist cannot be emailed", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin C.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin C.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps, mailer } = depsFor(database.db);
     mailer.failWith = "smtp: connection refused";
 
@@ -256,9 +275,9 @@ describe("an admin removing an artwork", () => {
   });
 
   it("records an audit entry naming the actor, the artwork, and the reason", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin D.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin D.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps } = depsFor(database.db);
 
     const result = await takeDownArtwork(deps, {
@@ -289,9 +308,9 @@ describe("a removed artwork", () => {
   const database = useTestDatabase();
 
   it("cannot be republished by its artist", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin E.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin E.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps } = depsFor(database.db);
 
     await takeDownArtwork(deps, { actorId: adminId, artworkId, reason: "not_original_work" });
@@ -341,10 +360,10 @@ describe("a removed artwork", () => {
   it("survives a suspension being lifted, unlike the artist's other work", async () => {
     // The two rules meeting: reinstatement restores visibility by derivation,
     // and a removed artwork stays out because its own status keeps it out.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin F.");
-    const artistId = await seedArtist(database.db);
-    const kept = await seedPublishedArtwork(database.db, artistId, "Kept");
-    const removed = await seedPublishedArtwork(database.db, artistId, "Removed");
+    const adminId = await seedAccount(database, ["admin"], "Admin F.");
+    const artistId = await seedArtist(database);
+    const kept = await seedPublishedArtwork(database, artistId, "Kept");
+    const removed = await seedPublishedArtwork(database, artistId, "Removed");
     const { deps } = depsFor(database.db);
 
     await takeDownArtwork(deps, {
@@ -368,10 +387,10 @@ describe("takedowns that must be refused", () => {
   const database = useTestDatabase();
 
   it("refuses a non-admin, with not-found, and changes nothing", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin G.");
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer H.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin G.");
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer H.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps, mailer } = depsFor(database.db);
 
     await expect(
@@ -393,9 +412,9 @@ describe("takedowns that must be refused", () => {
   });
 
   it("refuses the artist trying to take down their own rival's work", async () => {
-    const artistId = await seedArtist(database.db, "Artist I.", "i@example.com");
-    const rivalId = await seedArtist(database.db, "Artist J.", "j@example.com");
-    const artworkId = await seedPublishedArtwork(database.db, rivalId);
+    const artistId = await seedArtist(database, "Artist I.", "i@example.com");
+    const rivalId = await seedArtist(database, "Artist J.", "j@example.com");
+    const artworkId = await seedPublishedArtwork(database, rivalId);
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -410,9 +429,9 @@ describe("takedowns that must be refused", () => {
   });
 
   it("refuses a takedown with no stated reason", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin K.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin K.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps } = depsFor(database.db);
 
     for (const reason of ["", "   "]) {
@@ -430,7 +449,7 @@ describe("takedowns that must be refused", () => {
   });
 
   it("refuses an artwork that does not exist", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin L.");
+    const adminId = await seedAccount(database, ["admin"], "Admin L.");
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -442,9 +461,9 @@ describe("takedowns that must be refused", () => {
     // The coupling again, on the third action that uses it. `admin_audit.note`
     // is bounded at 2000 characters, so an over-long operator note fails the
     // audit insert after `removeArtwork` has already written the status.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin M.");
-    const artistId = await seedArtist(database.db);
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const adminId = await seedAccount(database, ["admin"], "Admin M.");
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
     const { deps, mailer } = depsFor(database.db);
 
     await expect(
@@ -473,11 +492,11 @@ describe("an artwork with an order already placed", () => {
   it("is removed without touching the order", async () => {
     // "An admin removes an artwork that has a paid but undelivered order ->
     // the existing order continues through its lifecycle unaffected."
-    const adminId = await seedAccount(database.db, ["admin"], "Admin N.");
-    const artistId = await seedArtist(database.db);
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer O.");
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
-    const orders = await createStandInOrders(database.db);
+    const adminId = await seedAccount(database, ["admin"], "Admin N.");
+    const artistId = await seedArtist(database);
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer O.");
+    const artworkId = await seedPublishedArtwork(database, artistId);
+    const orders = await createStandInOrders(database);
     const orderId = await orders.placePaidOrder(artworkId, buyerId);
 
     const before = await orders.snapshot(artworkId);
@@ -511,11 +530,11 @@ describe("an artwork with an order already placed", () => {
   });
 
   it("leaves a reservation mid-checkout alone too", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin P.");
-    const artistId = await seedArtist(database.db);
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer Q.");
-    const artworkId = await seedPublishedArtwork(database.db, artistId);
-    const orders = await createStandInOrders(database.db);
+    const adminId = await seedAccount(database, ["admin"], "Admin P.");
+    const artistId = await seedArtist(database);
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer Q.");
+    const artworkId = await seedPublishedArtwork(database, artistId);
+    const orders = await createStandInOrders(database);
 
     await database.db.query(
       `insert into stand_in_reservations (artwork_id, buyer_id, state)

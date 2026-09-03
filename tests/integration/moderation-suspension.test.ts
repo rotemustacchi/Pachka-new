@@ -25,7 +25,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { useTestDatabase } from "../harness";
+import {
+  defineGuardedScratchTable,
+  grantAdminRole,
+  useTestDatabase,
+  type TestDatabase,
+} from "../harness";
 import { FakeAuthGateway } from "../fakes/auth-gateway";
 import { isSuspended, signIn } from "@/modules/accounts";
 import {
@@ -39,7 +44,12 @@ import {
 } from "@/modules/moderation";
 import type { Database, Sql } from "@/shared/db";
 
-async function seedAccount(db: Database, roles: readonly string[], name: string): Promise<string> {
+async function seedAccount(
+  database: TestDatabase,
+  roles: readonly string[],
+  name: string,
+): Promise<string> {
+  const db = database.db;
   const { rows } = await db.query<{ user_id: string }>(
     "insert into profiles (user_id, display_name) values (gen_random_uuid(), $1) returning user_id",
     [name],
@@ -47,7 +57,11 @@ async function seedAccount(db: Database, roles: readonly string[], name: string)
   const id = rows[0]!.user_id;
   await db.query("insert into account_status (user_id, verified_at) values ($1, now())", [id]);
   for (const role of roles) {
-    await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
+    // `admin` is not grantable through the application (SECURITY.md S0-2 item
+    // 4), and `user_roles_server_insert` enforces that, so it is seeded the way
+    // an operator would grant it: out of band, with database credentials.
+    if (role === "admin") await grantAdminRole(database, id);
+    else await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
   }
   return id;
 }
@@ -61,20 +75,21 @@ function depsFor(db: Database, auth = new FakeAuthGateway(), payouts?: PayoutLed
 // A real ledger, standing in for the payouts module until it ships.
 // ---------------------------------------------------------------------------
 
-async function createLedger(db: Database): Promise<PayoutLedgerPort> {
-  await db.query(`
-    create table stand_in_payout_ledger (
+async function createLedger(database: TestDatabase): Promise<PayoutLedgerPort> {
+  // The throwaway database this test owns is dropped whole afterwards, so there
+  // is nothing to clean up and no fixture shared with any other test.
+  await defineGuardedScratchTable(
+    database,
+    "stand_in_payout_ledger",
+    `create table stand_in_payout_ledger (
       id            uuid primary key default gen_random_uuid(),
       artist_id     uuid   not null,
       amount_agorot bigint not null,
       status        text   not null,
       flagged_by    uuid,
       flagged_at    timestamptz
-    )
-  `);
-  // The throwaway database this test owns is dropped whole afterwards, so there
-  // is nothing to clean up and no fixture shared with any other test.
-  await db.query("alter table stand_in_payout_ledger enable row level security");
+    )`,
+  );
 
   return {
     async outstandingFor(sql: Sql, artistId: string) {
@@ -106,8 +121,8 @@ describe("suspending an account", () => {
   const database = useTestDatabase();
 
   it("marks it suspended, ends its sessions, and records who did it and why", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin A.");
-    const artistId = await seedAccount(database.db, ["buyer", "artist"], "Artist B.");
+    const adminId = await seedAccount(database, ["admin"], "Admin A.");
+    const artistId = await seedAccount(database, ["buyer", "artist"], "Artist B.");
     const { deps, auth } = depsFor(database.db);
 
     const result = await suspendAccount(deps, {
@@ -137,7 +152,7 @@ describe("suspending an account", () => {
   });
 
   it("stops the account signing in", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin C.");
+    const adminId = await seedAccount(database, ["admin"], "Admin C.");
     const auth = new FakeAuthGateway();
     const created = await auth.createUser("artist@example.com", "a-long-enough-password");
     if (!created.created) throw new Error("fixture: address already taken");
@@ -169,8 +184,8 @@ describe("suspending an account", () => {
     // Withdrawal is derived, not a bulk update: the public-read policy calls
     // accounts.account_is_suspended() at query time. This asserts the derivation
     // actually responds to what moderation wrote.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin E.");
-    const artistId = await seedAccount(database.db, ["buyer", "artist"], "Artist F.");
+    const adminId = await seedAccount(database, ["admin"], "Admin E.");
+    const artistId = await seedAccount(database, ["buyer", "artist"], "Artist F.");
     await database.db.query(
       "insert into artist_profiles (user_id, display_name) values ($1, 'Artist F.')",
       [artistId],
@@ -195,8 +210,8 @@ describe("suspending an account", () => {
   });
 
   it("refuses a suspension with no reason, and writes nothing", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin G.");
-    const artistId = await seedAccount(database.db, ["artist"], "Artist H.");
+    const adminId = await seedAccount(database, ["admin"], "Admin G.");
+    const artistId = await seedAccount(database, ["artist"], "Artist H.");
     const { deps } = depsFor(database.db);
 
     for (const reason of ["", "   "]) {
@@ -210,8 +225,8 @@ describe("suspending an account", () => {
   });
 
   it("refuses a non-admin, with not-found, and writes nothing", async () => {
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer I.");
-    const artistId = await seedAccount(database.db, ["artist"], "Artist J.");
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer I.");
+    const artistId = await seedAccount(database, ["artist"], "Artist J.");
     const { deps, auth } = depsFor(database.db);
 
     await expect(
@@ -224,7 +239,7 @@ describe("suspending an account", () => {
   });
 
   it("refuses an account that does not exist", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin K.");
+    const adminId = await seedAccount(database, ["admin"], "Admin K.");
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -233,7 +248,7 @@ describe("suspending an account", () => {
   });
 
   it("refuses an admin suspending themselves", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin L.");
+    const adminId = await seedAccount(database, ["admin"], "Admin L.");
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -257,8 +272,8 @@ describe("the audit entry and the action it records", () => {
     // by a note the operator typed. Nothing here is stubbed or intercepted: the
     // suspension is written first, the audit insert then fails on the column
     // check, and the transaction takes both down.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin M.");
-    const artistId = await seedAccount(database.db, ["buyer", "artist"], "Artist N.");
+    const adminId = await seedAccount(database, ["admin"], "Admin M.");
+    const artistId = await seedAccount(database, ["buyer", "artist"], "Artist N.");
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -292,9 +307,9 @@ describe("the audit entry and the action it records", () => {
     // this throws, and an entry would survive for a suspension that never
     // happened. Here the payouts module raises -- a real error from real SQL,
     // after `recordAdminAction` has returned.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin M2.");
-    const artistId = await seedAccount(database.db, ["buyer", "artist"], "Artist N2.");
-    const ledger = await createLedger(database.db);
+    const adminId = await seedAccount(database, ["admin"], "Admin M2.");
+    const artistId = await seedAccount(database, ["buyer", "artist"], "Artist N2.");
+    const ledger = await createLedger(database);
     await database.db.query(
       `insert into stand_in_payout_ledger (artist_id, amount_agorot, status)
        values ($1, 50000, 'eligible')`,
@@ -336,7 +351,7 @@ describe("the audit entry and the action it records", () => {
   });
 
   it("still holds when the failure comes from the action rather than the audit", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin O.");
+    const adminId = await seedAccount(database, ["admin"], "Admin O.");
     const { deps } = depsFor(database.db);
 
     // No account_status row for this id, so the action refuses before writing.
@@ -352,9 +367,9 @@ describe("an artist with unsettled payouts", () => {
   const database = useTestDatabase();
 
   it("keeps the money: the ledger entries are retained and flagged, not cancelled", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin P.");
-    const artistId = await seedAccount(database.db, ["buyer", "artist"], "Artist Q.");
-    const ledger = await createLedger(database.db);
+    const adminId = await seedAccount(database, ["admin"], "Admin P.");
+    const artistId = await seedAccount(database, ["buyer", "artist"], "Artist Q.");
+    const ledger = await createLedger(database);
 
     await database.db.query(
       `insert into stand_in_payout_ledger (artist_id, amount_agorot, status)
@@ -409,8 +424,8 @@ describe("an artist with unsettled payouts", () => {
   it("records that nobody checked when the payouts module is not wired in", async () => {
     // The dangerous failure would be recording "no outstanding payouts". This
     // asserts the entry says the question was never asked.
-    const adminId = await seedAccount(database.db, ["admin"], "Admin R.");
-    const artistId = await seedAccount(database.db, ["artist"], "Artist S.");
+    const adminId = await seedAccount(database, ["admin"], "Admin R.");
+    const artistId = await seedAccount(database, ["artist"], "Artist S.");
     const { deps } = depsFor(database.db);
 
     const result = await suspendAccount(deps, {
@@ -431,8 +446,8 @@ describe("lifting a suspension", () => {
   const database = useTestDatabase();
 
   it("gives the account back its access and its public visibility", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin T.");
-    const artistId = await seedAccount(database.db, ["buyer", "artist"], "Artist U.");
+    const adminId = await seedAccount(database, ["admin"], "Admin T.");
+    const artistId = await seedAccount(database, ["buyer", "artist"], "Artist U.");
     await database.db.query(
       "insert into artist_profiles (user_id, display_name) values ($1, 'Artist U.')",
       [artistId],
@@ -465,8 +480,8 @@ describe("lifting a suspension", () => {
   });
 
   it("leaves both entries in the log, in order, chained", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin V.");
-    const artistId = await seedAccount(database.db, ["artist"], "Artist W.");
+    const adminId = await seedAccount(database, ["admin"], "Admin V.");
+    const artistId = await seedAccount(database, ["artist"], "Artist W.");
     const { deps } = depsFor(database.db);
 
     const suspension = await suspendAccount(deps, {
@@ -486,8 +501,8 @@ describe("lifting a suspension", () => {
   });
 
   it("refuses to lift a suspension that is not there", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin X.");
-    const artistId = await seedAccount(database.db, ["artist"], "Artist Y.");
+    const adminId = await seedAccount(database, ["admin"], "Admin X.");
+    const artistId = await seedAccount(database, ["artist"], "Artist Y.");
     const { deps } = depsFor(database.db);
 
     await expect(
@@ -498,9 +513,9 @@ describe("lifting a suspension", () => {
   });
 
   it("refuses a non-admin", async () => {
-    const adminId = await seedAccount(database.db, ["admin"], "Admin Z.");
-    const buyerId = await seedAccount(database.db, ["buyer"], "Buyer AA.");
-    const artistId = await seedAccount(database.db, ["artist"], "Artist AB.");
+    const adminId = await seedAccount(database, ["admin"], "Admin Z.");
+    const buyerId = await seedAccount(database, ["buyer"], "Buyer AA.");
+    const artistId = await seedAccount(database, ["artist"], "Artist AB.");
     const { deps } = depsFor(database.db);
 
     await suspendAccount(deps, { actorId: adminId, userId: artistId, reason: "Under review" });

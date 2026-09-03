@@ -16,9 +16,15 @@
  * exactly what it will see in production, and a test that gets a row back here
  * is a test that says an attacker gets that row too.
  *
- * `database.db` on its own is NOT this surface: it connects as the database
- * owner and carries BYPASSRLS, which is correct for server-side module code and
- * useless for proving a policy holds.
+ * Pass `database.dataApi`, not `database.db`. The two are different login roles
+ * on purpose. `dataApi` is the authenticator PostgREST connects as, a member of
+ * `anon` and `authenticated` and nothing else, so a policy written `to anon` is
+ * the only thing that can let a query through here. `database.db` is the
+ * server's own role, a member of `service_role` and nothing else -- it cannot
+ * `set role anon` at all, and if it could, Postgres would match `to anon`
+ * policies against it by membership and the two surfaces would stop being
+ * distinguishable. Neither role is a superuser and neither bypasses RLS; see
+ * `login-roles.ts`.
  */
 import type { Database, Tx } from "@/shared/db";
 

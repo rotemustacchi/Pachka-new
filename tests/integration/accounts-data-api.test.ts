@@ -171,7 +171,7 @@ describe("the data API, as an anonymous caller holding only the anon key", () =>
   it("returns no contact or financial column from any table in public", async () => {
     await seedArtistWithSecrets(database.db);
 
-    const { columns } = await sweep(database.db, (fn) => asAnon(database.db, fn));
+    const { columns } = await sweep(database.db, (fn) => asAnon(database.dataApi, fn));
 
     const exposed = columns.filter((name) =>
       FORBIDDEN_COLUMN_FRAGMENTS.some((fragment) => name.includes(fragment)),
@@ -184,7 +184,7 @@ describe("the data API, as an anonymous caller holding only the anon key", () =>
   it("returns none of the artist's actual contact details or bank details", async () => {
     await seedArtistWithSecrets(database.db);
 
-    const { body } = await sweep(database.db, (fn) => asAnon(database.db, fn));
+    const { body } = await sweep(database.db, (fn) => asAnon(database.dataApi, fn));
 
     // Asserted value by value rather than in a loop, so a failure names which
     // one leaked.
@@ -201,11 +201,11 @@ describe("the data API, as an anonymous caller holding only the anon key", () =>
     // before any policy is consulted. A future permissive policy cannot
     // resurrect the exposure on its own (SECURITY.md S0-1 item 2).
     await expect(
-      asAnon(database.db, (tx) => tx.query("select * from artist_contact_details")),
+      asAnon(database.dataApi, (tx) => tx.query("select * from artist_contact_details")),
     ).rejects.toThrow(/permission denied/i);
 
     await expect(
-      asAnon(database.db, (tx) => tx.query("select * from artist_payout_details")),
+      asAnon(database.dataApi, (tx) => tx.query("select * from artist_payout_details")),
     ).rejects.toThrow(/permission denied/i);
   });
 
@@ -215,7 +215,7 @@ describe("the data API, as an anonymous caller holding only the anon key", () =>
     const { artistId } = await seedArtistWithSecrets(database.db);
     await giveArtistAnArtwork(database.db, artistId);
 
-    const rows = await asAnon(database.db, async (tx) => {
+    const rows = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query<{ display_name: string; city: string }>(
         "select display_name, city from profiles where user_id = $1",
         [artistId],
@@ -237,7 +237,7 @@ describe("the data API, as an anonymous caller holding only the anon key", () =>
       "insert into profiles (user_id, display_name, city) values (gen_random_uuid(), 'Private Buyer', 'Haifa')",
     );
 
-    const rows = await asAnon(database.db, async (tx) => {
+    const rows = await asAnon(database.dataApi, async (tx) => {
       const result = await tx.query<{ display_name: string }>("select display_name from profiles");
       return result.rows;
     });
@@ -269,7 +269,7 @@ describe("the data API, as a signed-in buyer who is not the artist", () => {
     await seedArtistWithSecrets(database.db);
     const buyerId = await seedBuyer(database.db);
 
-    const { columns, body } = await sweep(database.db, (fn) => asUser(database.db, buyerId, fn));
+    const { columns, body } = await sweep(database.db, (fn) => asUser(database.dataApi, buyerId, fn));
 
     const exposed = columns.filter((name) =>
       FORBIDDEN_COLUMN_FRAGMENTS.some((fragment) => name.includes(fragment)),
@@ -284,7 +284,7 @@ describe("the data API, as a signed-in buyer who is not the artist", () => {
     const { artistId } = await seedArtistWithSecrets(database.db);
     const buyerId = await seedBuyer(database.db);
 
-    const rows = await asUser(database.db, buyerId, async (tx) => {
+    const rows = await asUser(database.dataApi, buyerId, async (tx) => {
       const result = await tx.query("select * from user_roles where user_id = $1", [artistId]);
       return result.rows;
     });
@@ -296,7 +296,7 @@ describe("the data API, as a signed-in buyer who is not the artist", () => {
     const { artistId } = await seedArtistWithSecrets(database.db);
     const buyerId = await seedBuyer(database.db);
 
-    const rows = await asUser(database.db, buyerId, async (tx) => {
+    const rows = await asUser(database.dataApi, buyerId, async (tx) => {
       const result = await tx.query("select * from account_status where user_id = $1", [artistId]);
       return result.rows;
     });
@@ -307,7 +307,7 @@ describe("the data API, as a signed-in buyer who is not the artist", () => {
   it("reads its own roles, so the policy is scoped and not simply closed", async () => {
     const buyerId = await seedBuyer(database.db);
 
-    const rows = await asUser(database.db, buyerId, async (tx) => {
+    const rows = await asUser(database.dataApi, buyerId, async (tx) => {
       const result = await tx.query<{ role: string }>("select role from user_roles");
       return result.rows;
     });
@@ -327,7 +327,7 @@ describe("an artist reading their own data through the data API", () => {
     const { artistId } = await seedArtistWithSecrets(database.db);
 
     await expect(
-      asUser(database.db, artistId, (tx) => tx.query("select * from artist_contact_details")),
+      asUser(database.dataApi, artistId, (tx) => tx.query("select * from artist_contact_details")),
     ).rejects.toThrow(/permission denied/i);
   });
 
@@ -335,7 +335,7 @@ describe("an artist reading their own data through the data API", () => {
     const { artistId } = await seedArtistWithSecrets(database.db);
 
     await expect(
-      asUser(database.db, artistId, (tx) => tx.query("select * from artist_payout_details")),
+      asUser(database.dataApi, artistId, (tx) => tx.query("select * from artist_payout_details")),
     ).rejects.toThrow(/permission denied/i);
   });
 

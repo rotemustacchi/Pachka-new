@@ -40,11 +40,25 @@ import { databaseUrl } from "./url";
 export interface TestDatabase {
   /** Name of the throwaway database, e.g. `pachka_t_9f3a...`. */
   readonly name: string;
-  /** Connection URL for it. Pass to anything that takes a connection string. */
+  /**
+   * Connection URL for it, as the application role. Pass to anything that takes
+   * a connection string.
+   */
   readonly url: string;
-  /** The real `shared/db` client, pointed at this database. */
+  /**
+   * The real `shared/db` client, pointed at this database, connected as the
+   * server's own role — a non-superuser member of `service_role` that does not
+   * bypass RLS. Server-side writes therefore succeed here only if a policy and
+   * a grant actually permit them, which is the entire point.
+   */
   readonly db: Database;
-  /** A raw pool, for tests that need to hold connections themselves. */
+  /**
+   * The PostgREST surface, connected as the authenticator role. `asAnon` and
+   * `asUser` take this one: they `set role` to `anon` or `authenticated`, which
+   * the application role deliberately cannot do.
+   */
+  readonly dataApi: Database;
+  /** A raw pool on the application role, for tests that hold connections themselves. */
   readonly pool: Pool;
   /** Close connections and delete the database. */
   drop(): Promise<void>;
@@ -64,22 +78,28 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   const template = inject("pachkaTemplate");
   const name = `pachka_t_${randomBytes(8).toString("hex")}`;
 
+  // Creating and dropping databases is the superuser's job and nothing else is.
   await onAdmin((admin) => admin.query(`create database ${name} template ${template}`));
 
-  const url = databaseUrl(inject("pachkaAdminUrl"), name);
+  const url = databaseUrl(inject("pachkaAppUrl"), name);
   const pool = new Pool({ connectionString: url, max: 10 });
   pool.on("error", () => {
     /* discarded by pg on the next checkout */
   });
   const db = createDatabase({ connectionString: url, max: 10 });
+  const dataApi = createDatabase({
+    connectionString: databaseUrl(inject("pachkaDataApiUrl"), name),
+    max: 5,
+  });
 
   return {
     name,
     url,
     db,
+    dataApi,
     pool,
     async drop() {
-      await Promise.allSettled([db.end(), pool.end()]);
+      await Promise.allSettled([db.end(), dataApi.end(), pool.end()]);
       // `with (force)` terminates any connection a test forgot to close, so one
       // leaky test cannot wedge the run.
       await onAdmin((admin) => admin.query(`drop database if exists ${name} with (force)`));
@@ -124,6 +144,9 @@ export function useTestDatabase(): TestDatabase {
     },
     get db() {
       return live().db;
+    },
+    get dataApi() {
+      return live().dataApi;
     },
     get pool() {
       return live().pool;

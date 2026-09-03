@@ -26,14 +26,20 @@ async function seedAccount(db: Database, name: string): Promise<string> {
 /**
  * A rate table this test owns entirely.
  *
- * The seeded tiers from the migration are removed first: `classifyPackage`
- * considers every active tier, and a test about "larger than every tier" has to
- * know what every tier is. This is the test's own database, so deleting them
- * affects nothing else.
+ * The tiers and zones the migration seeds are switched off first, not deleted.
+ * `classifyPackage` considers every ACTIVE tier, and a test about "larger than
+ * every tier" has to know what every tier is -- but deactivating is what the
+ * module actually offers, and there is no DELETE policy on the rate table for
+ * any role. That is deliberate: `shipping_rates` references zones and tiers by
+ * id, and a past quote is only reconstructible while the rows it named still
+ * exist, so retirement is the `active` flag rather than a deletion. The
+ * upserts below re-activate the two tiers and two zones this file wants and
+ * leave the rest switched off, which is exactly the state the old delete was
+ * reaching for.
  */
 async function seedRateTable(db: Database): Promise<void> {
-  await db.query("delete from shipping_tiers");
-  await db.query("delete from shipping_zones");
+  await db.query("update shipping_tiers set active = false where active");
+  await db.query("update shipping_zones set active = false where active");
 
   await upsertTier(db, {
     code: "small",
@@ -320,16 +326,27 @@ describe("a zone and tier combination nobody priced", () => {
   it("refuses to quote rather than quoting zero", async () => {
     await seedRateTable(database.db);
     const artistId = await seedAccount(database.db, "Noa B.");
-    await database.db.query(
-      `delete from shipping_rates r using shipping_tiers t where r.tier_id = t.id and t.code = 'large'`,
-    );
+
+    // A tier an admin added and forgot to price -- which is the situation this
+    // test names, and now the situation it actually creates. `seedRateTable`
+    // prices every combination it defines, so the unpriced one has to be a new
+    // tier rather than a rate removed from an existing one.
+    await upsertTier(database.db, {
+      code: "oversized",
+      displayName: "ענק",
+      ordinal: 40,
+      maxLengthMm: 2200,
+      maxWidthMm: 1800,
+      maxHeightMm: 900,
+      maxWeightGrams: 60_000,
+    });
 
     // Falling back to zero would ship a large artwork across the country free of
     // charge every time an admin added a tier and forgot a row.
     await expect(
       quoteShipping(database.db, {
         address: { countryCode: "IL", city: "Nearby City" },
-        lines: [{ artworkId: "art-2", artistId, sizeTierCode: "large" }],
+        lines: [{ artworkId: "art-2", artistId, sizeTierCode: "oversized" }],
       }),
     ).rejects.toMatchObject({ kind: "conflict", code: "shipping.rate_not_configured" });
   });

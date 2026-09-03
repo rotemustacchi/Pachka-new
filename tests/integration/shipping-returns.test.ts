@@ -14,7 +14,7 @@
  * never work in their favour.
  */
 import { describe, expect, it } from "vitest";
-import { asUser, useTestDatabase } from "../harness";
+import { asUser, grantAdminRole, useTestDatabase, type TestDatabase } from "../harness";
 import { setConfig } from "@/shared/config";
 import type { Database } from "@/shared/db";
 import {
@@ -52,13 +52,22 @@ const ARTIST_ADDRESS: PostalAddress = {
   countryCode: "IL",
 };
 
-async function seedAccount(db: Database, name: string, role: string): Promise<string> {
+async function seedAccount(
+  database: TestDatabase,
+  name: string,
+  role: string,
+): Promise<string> {
+  const db = database.db;
   const { rows } = await db.query<{ user_id: string }>(
     "insert into profiles (user_id, display_name) values (gen_random_uuid(), $1) returning user_id",
     [name],
   );
   const id = rows[0]!.user_id;
-  await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
+  // `admin` is a manual database operation (SECURITY.md S0-2 item 4), which
+  // `user_roles_server_insert` now enforces, so the operator account is seeded
+  // out of band rather than through the application's own connection.
+  if (role === "admin") await grantAdminRole(database, id);
+  else await db.query("insert into user_roles (user_id, role) values ($1, $2)", [id, role]);
   return id;
 }
 
@@ -71,10 +80,11 @@ interface Parties {
   readonly fulfilmentId: string;
 }
 
-async function seedParties(db: Database): Promise<Parties> {
-  const buyerId = await seedAccount(db, "Michal R.", "buyer");
-  const artistId = await seedAccount(db, "Noa B.", "artist");
-  const operatorId = await seedAccount(db, "PACHKA Ops", "admin");
+async function seedParties(database: TestDatabase): Promise<Parties> {
+  const db = database.db;
+  const buyerId = await seedAccount(database, "Michal R.", "buyer");
+  const artistId = await seedAccount(database, "Noa B.", "artist");
+  const operatorId = await seedAccount(database, "PACHKA Ops", "admin");
   await db.query(
     `insert into artist_contact_details (user_id, email, phone, street_address, postal_code)
      values ($1, $2, $3, $4, $5)`,
@@ -119,7 +129,7 @@ describe("the fourteen-day cancellation right", () => {
   const database = useTestDatabase();
 
   it("accepts a request ten days after delivery and issues return instructions", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
 
     const result = await requestReturn(database.db, {
       orderId: parties.orderId,
@@ -138,7 +148,7 @@ describe("the fourteen-day cancellation right", () => {
   });
 
   it("declines a request twenty days after delivery and says the statutory window has closed", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
 
     await expect(
       requestReturn(database.db, {
@@ -164,7 +174,7 @@ describe("the fourteen-day cancellation right", () => {
   });
 
   it("accepts a request on the last day of the window and refuses the moment after", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const lastMoment = new Date("2026-03-15T09:00:00Z"); // delivered + 14 days.
 
     const accepted = await requestReturn(database.db, {
@@ -179,7 +189,7 @@ describe("the fourteen-day cancellation right", () => {
     });
     expect(accepted.returnCase.status).toBe("requested");
 
-    const second = await seedParties(database.db);
+    const second = await seedParties(database);
     await expect(
       requestReturn(database.db, {
         orderId: second.orderId,
@@ -197,7 +207,7 @@ describe("the fourteen-day cancellation right", () => {
   it("counts the window in calendar days, so a weekend does not extend it", async () => {
     // 1 March 2026 is a Sunday; delivered + 14 calendar days spans two weekends.
     // Counting business days here would hand every buyer four extra days.
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
 
     await expect(
       requestReturn(database.db, {
@@ -214,7 +224,7 @@ describe("the fourteen-day cancellation right", () => {
   });
 
   it("follows the configured window rather than a hard-coded fourteen", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     await setConfig(database.db, "returns.window_days", 30);
 
     const result = await requestReturn(database.db, {
@@ -232,7 +242,7 @@ describe("the fourteen-day cancellation right", () => {
   });
 
   it("refuses a second request for the same artwork", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     await openReturn(database.db, parties);
 
     await expect(openReturn(database.db, parties)).rejects.toMatchObject({
@@ -246,7 +256,7 @@ describe("the return instructions issued to the buyer", () => {
   const database = useTestDatabase();
 
   it("name the PACHKA return address and no artist detail of any kind", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
 
     const result = await requestReturn(database.db, {
       orderId: parties.orderId,
@@ -268,7 +278,7 @@ describe("the return instructions issued to the buyer", () => {
   });
 
   it("carry the terms, so the buyer sees who pays for the return alongside the address", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     const stored = await readReturn(database.db, returnId);
 
@@ -316,7 +326,7 @@ describe("a return that arrives intact", () => {
   const database = useTestDatabase();
 
   it("releases the refund, completes the order and restores the artwork", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
 
     const result = await recordOperatorReceipt(database.db, {
@@ -334,7 +344,7 @@ describe("a return that arrives intact", () => {
   });
 
   it("refunds the full subtotal when no cancellation fee is configured", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties, { itemSubtotalAgorot: 400_000 });
 
     const result = await recordOperatorReceipt(database.db, {
@@ -348,7 +358,7 @@ describe("a return that arrives intact", () => {
   });
 
   it("deducts the configured cancellation fee, and loses not one agora to rounding", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     await setConfig(database.db, "returns.cancellation_fee_rate", 0.05);
     // 133_337 * 0.05 = 6666.85, which has to round somewhere. Whichever way it
     // goes, fee + refund must still be exactly the subtotal.
@@ -367,7 +377,7 @@ describe("a return that arrives intact", () => {
   });
 
   it("stores the same figures it returned", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     await setConfig(database.db, "returns.cancellation_fee_rate", 0.05);
     const returnId = await openReturn(database.db, parties, { itemSubtotalAgorot: 400_000 });
 
@@ -383,7 +393,7 @@ describe("a return that arrives intact", () => {
   });
 
   it("puts the artwork back within reach of a new buyer", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     expect(await isArtworkHeldByOpenReturn(database.db, parties.artworkId)).toBe(true);
 
@@ -397,7 +407,7 @@ describe("a return that arrives intact", () => {
   });
 
   it("cannot be recorded twice", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     await recordOperatorReceipt(database.db, {
       returnId,
@@ -419,7 +429,7 @@ describe("a return that arrives damaged", () => {
   const database = useTestDatabase();
 
   it("withholds the refund, opens an admin case and tells both parties", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
 
     const result = await recordOperatorReceipt(database.db, {
@@ -437,7 +447,7 @@ describe("a return that arrives damaged", () => {
   });
 
   it("does not put the artwork back on sale", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
 
     const result = await recordOperatorReceipt(database.db, {
@@ -456,7 +466,7 @@ describe("a return that never arrives", () => {
   const database = useTestDatabase();
 
   it("is flagged for admin review and is not refunded automatically", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
 
     // The configured receipt window is 14 days from the request.
@@ -475,7 +485,7 @@ describe("a return that never arrives", () => {
   });
 
   it("is left alone while the window is still open", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     await openReturn(database.db, parties);
 
     const sweep = await flagUnreceivedReturns(database.db, {
@@ -486,7 +496,7 @@ describe("a return that never arrives", () => {
   });
 
   it("keeps the artwork unavailable while it is unresolved", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     await openReturn(database.db, parties);
     await flagUnreceivedReturns(database.db, { now: new Date("2026-03-30T09:00:00Z") });
 
@@ -494,7 +504,7 @@ describe("a return that never arrives", () => {
   });
 
   it("still accepts a late arrival an operator finds afterwards", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     await flagUnreceivedReturns(database.db, { now: new Date("2026-03-30T09:00:00Z") });
 
@@ -514,7 +524,7 @@ describe("forwarding the artwork on to its artist", () => {
   const database = useTestDatabase();
 
   it("cannot happen before an operator has the parcel in hand", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
 
     await expect(
@@ -527,7 +537,7 @@ describe("forwarding the artwork on to its artist", () => {
   });
 
   it("puts the artist's address on the label and nowhere else", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     await recordOperatorReceipt(database.db, {
       returnId,
@@ -558,7 +568,7 @@ describe("an artist who does not respond to a forwarded return", () => {
   const database = useTestDatabase();
 
   async function forwarded(db: Database): Promise<{ parties: Parties; returnId: string }> {
-    const parties = await seedParties(db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(db, parties);
     await recordOperatorReceipt(db, {
       returnId,
@@ -649,7 +659,7 @@ describe("an artist who does not respond to a forwarded return", () => {
     // The other route into forwarding: the operator recorded damage, so the case
     // is already disputed and no money has moved. An artist report there is a
     // genuine dispute, and must stay one.
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     await recordOperatorReceipt(database.db, {
       returnId,
@@ -676,7 +686,7 @@ describe("an artist who does not respond to a forwarded return", () => {
 
   it("cannot respond to another artist's return, and is told nothing about it", async () => {
     const { returnId } = await forwarded(database.db);
-    const otherArtist = await seedAccount(database.db, "Ori K.", "artist");
+    const otherArtist = await seedAccount(database, "Ori K.", "artist");
 
     await expect(
       recordArtistResponse(database.db, {
@@ -692,7 +702,7 @@ describe("an admin resolving a disputed return", () => {
   const database = useTestDatabase();
 
   async function disputed(db: Database): Promise<{ parties: Parties; returnId: string }> {
-    const parties = await seedParties(db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(db, parties);
     await recordOperatorReceipt(db, {
       returnId,
@@ -745,7 +755,7 @@ describe("an admin resolving a disputed return", () => {
   });
 
   it("may resolve a return that never arrived, and still restores nothing", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     await flagUnreceivedReturns(database.db, { now: new Date("2026-03-30T09:00:00Z") });
 
@@ -760,7 +770,7 @@ describe("an admin resolving a disputed return", () => {
   });
 
   it("has nothing to resolve on a case the operator already settled", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     await recordOperatorReceipt(database.db, {
       returnId,
@@ -782,7 +792,7 @@ describe("the refund and inventory gates in the database itself", () => {
   const database = useTestDatabase();
 
   it("refuse a refund authorised on a return nobody has received", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
 
     await expect(
@@ -794,7 +804,7 @@ describe("the refund and inventory gates in the database itself", () => {
   });
 
   it("refuse restoring inventory for an artwork that came back damaged", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
     await recordOperatorReceipt(database.db, {
       returnId,
@@ -808,7 +818,7 @@ describe("the refund and inventory gates in the database itself", () => {
   });
 
   it("refuse a receipt recorded without a condition", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties);
 
     await expect(
@@ -821,17 +831,17 @@ describe("a return on the public data API", () => {
   const database = useTestDatabase();
 
   it("is readable by its buyer and its artist, and by nobody else", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     await openReturn(database.db, parties);
-    const stranger = await seedAccount(database.db, "Someone Else", "buyer");
+    const stranger = await seedAccount(database, "Someone Else", "buyer");
 
-    const asBuyer = await asUser(database.db, parties.buyerId, async (tx) =>
+    const asBuyer = await asUser(database.dataApi, parties.buyerId, async (tx) =>
       (await tx.query("select id from returns")).rows,
     );
-    const asArtist = await asUser(database.db, parties.artistId, async (tx) =>
+    const asArtist = await asUser(database.dataApi, parties.artistId, async (tx) =>
       (await tx.query("select id from returns")).rows,
     );
-    const asStranger = await asUser(database.db, stranger, async (tx) =>
+    const asStranger = await asUser(database.dataApi, stranger, async (tx) =>
       (await tx.query("select id from returns")).rows,
     );
 
@@ -841,11 +851,11 @@ describe("a return on the public data API", () => {
   });
 
   it("cannot be written by its own buyer", async () => {
-    const parties = await seedParties(database.db);
+    const parties = await seedParties(database);
     await openReturn(database.db, parties);
 
     await expect(
-      asUser(database.db, parties.buyerId, (tx) =>
+      asUser(database.dataApi, parties.buyerId, (tx) =>
         tx.query("update returns set status = 'received_intact'"),
       ),
     ).rejects.toThrow(/permission denied/i);
