@@ -154,10 +154,6 @@ export const PENDING_CONFIG_KEYS: readonly PendingConfigKey[] = [
   },
 ] as const;
 
-const PENDING_BY_KEY: ReadonlyMap<string, PendingConfigKey> = new Map(
-  PENDING_CONFIG_KEYS.map((entry) => [entry.key, entry] as const),
-);
-
 interface ConfigRow {
   readonly key: string;
   readonly value: unknown;
