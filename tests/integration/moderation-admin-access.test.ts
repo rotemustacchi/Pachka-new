@@ -20,7 +20,6 @@ import {
   type TestDatabase,
 } from "../harness";
 import { isAdmin, readAuditTrail, recordAdminAction, requireAdmin, withAdminAction } from "@/modules/moderation";
-import type { Database } from "@/shared/db";
 
 async function seedAccount(
   database: TestDatabase,

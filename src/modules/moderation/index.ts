@@ -43,12 +43,12 @@ export {
 } from "./reports";
 
 export {
-  REPORT_MAX_PER_WINDOW,
-  REPORT_WINDOW_MINUTES,
   consumeReportRateLimit,
   hashSubject,
   pruneModerationRateLimitEvents,
+  reportRateLimit,
   type ModerationRateLimitBucket,
+  type ReportRateLimit,
 } from "./rate-limit";
 
 // ---- The admin queue: open reports grouped by subject, plus flagged uploads.

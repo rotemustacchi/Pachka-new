@@ -31,7 +31,7 @@ import {
 } from "../harness";
 import { FakeAuthGateway } from "../fakes/auth-gateway";
 import {
-  REPORT_MAX_PER_WINDOW,
+  reportRateLimit,
   REPORT_REASONS,
   fileReport,
   listQueue,
@@ -436,7 +436,12 @@ describe("report flooding", () => {
     const { deps } = depsFor(database.db);
     const flooder = "198.51.100.200";
 
-    for (let index = 0; index < REPORT_MAX_PER_WINDOW; index += 1) {
+    // Read from app_config rather than from a constant in the module: the
+    // limit is operator-tunable now, and a test that hard-coded ten would stop
+    // meaning anything the first time somebody tuned it.
+    const { maxPerWindow } = await reportRateLimit(database.db);
+
+    for (let index = 0; index < maxPerWindow; index += 1) {
       await fileReport(deps, {
         subject: { type: "artwork", artworkId },
         reason: "offensive_content",
@@ -445,7 +450,7 @@ describe("report flooding", () => {
     }
 
     const countAtLimit = await openReportCount(database.db, "artwork", artworkId);
-    expect(countAtLimit).toBe(REPORT_MAX_PER_WINDOW);
+    expect(countAtLimit).toBe(maxPerWindow);
 
     // Half. Every further attempt is refused, with 429 rather than 409: the
     // identical request succeeds once the window resets, so the client is being
@@ -468,11 +473,11 @@ describe("report flooding", () => {
       "select count(*)::text as count from reports where artwork_id = $1",
       [artworkId],
     );
-    expect(stored.count).toBe(String(REPORT_MAX_PER_WINDOW));
+    expect(stored.count).toBe(String(maxPerWindow));
 
     const queue = await listQueue(deps, adminId);
     expect(queue).toHaveLength(1);
-    expect(queue[0]!.reportCount).toBe(REPORT_MAX_PER_WINDOW);
+    expect(queue[0]!.reportCount).toBe(maxPerWindow);
   });
 
   it("counts the refused attempts, so a flooder cannot erase their own evidence", async () => {
@@ -487,7 +492,12 @@ describe("report flooding", () => {
     const { deps } = depsFor(database.db);
     const flooder = "198.51.100.201";
 
-    for (let index = 0; index < REPORT_MAX_PER_WINDOW; index += 1) {
+    // Read from app_config rather than from a constant in the module: the
+    // limit is operator-tunable now, and a test that hard-coded ten would stop
+    // meaning anything the first time somebody tuned it.
+    const { maxPerWindow } = await reportRateLimit(database.db);
+
+    for (let index = 0; index < maxPerWindow; index += 1) {
       await fileReport(deps, {
         subject: { type: "artwork", artworkId },
         reason: "other",
@@ -507,7 +517,7 @@ describe("report flooding", () => {
     const counters = await database.db.one<{ count: string }>(
       "select count(*)::text as count from moderation_rate_limit_events where bucket = 'report'",
     );
-    expect(counters.count).toBe(String(REPORT_MAX_PER_WINDOW + 3));
+    expect(counters.count).toBe(String(maxPerWindow + 3));
   });
 
   it("limits one client without silencing everybody else", async () => {
@@ -516,7 +526,12 @@ describe("report flooding", () => {
     await setOperatorAddress(database.db);
     const { deps } = depsFor(database.db);
 
-    for (let index = 0; index < REPORT_MAX_PER_WINDOW; index += 1) {
+    // Read from app_config rather than from a constant in the module: the
+    // limit is operator-tunable now, and a test that hard-coded ten would stop
+    // meaning anything the first time somebody tuned it.
+    const { maxPerWindow } = await reportRateLimit(database.db);
+
+    for (let index = 0; index < maxPerWindow; index += 1) {
       await fileReport(deps, {
         subject: { type: "artwork", artworkId },
         reason: "other",
@@ -531,7 +546,7 @@ describe("report flooding", () => {
         reason: "misleading_listing",
         clientId: "198.51.100.203",
       }),
-    ).resolves.toMatchObject({ reportCount: REPORT_MAX_PER_WINDOW + 1 });
+    ).resolves.toMatchObject({ reportCount: maxPerWindow + 1 });
   });
 
   it("lets the client back in once its window has been swept", async () => {
@@ -541,7 +556,12 @@ describe("report flooding", () => {
     const { deps } = depsFor(database.db);
     const client = "198.51.100.204";
 
-    for (let index = 0; index < REPORT_MAX_PER_WINDOW; index += 1) {
+    // Read from app_config rather than from a constant in the module: the
+    // limit is operator-tunable now, and a test that hard-coded ten would stop
+    // meaning anything the first time somebody tuned it.
+    const { maxPerWindow } = await reportRateLimit(database.db);
+
+    for (let index = 0; index < maxPerWindow; index += 1) {
       await fileReport(deps, {
         subject: { type: "artwork", artworkId },
         reason: "other",
@@ -559,7 +579,7 @@ describe("report flooding", () => {
     // No sleeping: the window is cleared by the sweep the way time would clear
     // it, which is the observable the limiter actually depends on.
     const pruned = await pruneModerationRateLimitEvents(database.db, 0);
-    expect(pruned).toBe(REPORT_MAX_PER_WINDOW + 1);
+    expect(pruned).toBe(maxPerWindow + 1);
 
     await expect(
       fileReport(deps, {

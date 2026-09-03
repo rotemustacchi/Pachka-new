@@ -1,19 +1,20 @@
 /**
- * Configuration this module needs that is not yet in the `app_config`
- * registry.
+ * The `app_config` keys this module reads, one function per value.
  *
- * `shared/config/registry.ts` is owned by the foundation, and adding a key
- * there is their edit, not this module's. Everything below is therefore a
- * literal marked `TODO(config)`, reported to the lead architect for
- * registration, and read through a single function per value so that swapping
- * it for `getConfig(db, key)` is a one-line change inside this file rather
- * than a hunt through the module.
+ * Every value here was a literal until the keys existed, because
+ * `shared/config/registry.ts` is the foundation's file and adding a key there
+ * was their edit rather than this module's. The keys are registered now, and
+ * the one-function-per-value shape that made the swap a single line each is
+ * kept: a caller asks for the value, not for the key, so nothing outside this
+ * file knows what any of them is called.
  *
- * The keys already registered and used as registered -- never as literals --
- * are `shipping.unshipped_grace_days`, `returns.window_days`,
+ * The keys registered earlier and always used as registered are
+ * `shipping.unshipped_grace_days`, `returns.window_days`,
  * `returns.receipt_window_days` and `returns.cancellation_fee_rate`.
  */
+import { getConfig } from "@/shared/config";
 import type { Sql } from "@/shared/db";
+import { AppError } from "@/shared/errors";
 
 /** A postal address. Only ever PACHKA's own; an artist address never becomes one of these. */
 export interface PostalAddress {
@@ -33,31 +34,35 @@ export interface PostalAddress {
  * otherwise disclose the artist on the first sale (`shipping-and-returns`,
  * "Returns route through a PACHKA return address"; SECURITY.md SPEC-A).
  *
- * TODO(config): register `shipping.pachka_return_address` as a `json` key and
- * read it here. It is operational data an operator changes when the PO box
- * moves, and a deployment should not be what changes it.
+ * Operational data: an operator changes it when the PO box moves, and a
+ * deployment should not be what changes it. The seeded value is a placeholder
+ * and must be replaced before launch.
+ *
+ * The shape is checked here rather than trusted, because `json` is the one
+ * `value_type` that `shared/config` cannot validate structurally -- it can only
+ * say the stored value is JSON. A malformed address would otherwise reach a
+ * shipping label, and the failure mode of a label with a missing line is a
+ * parcel that goes nowhere with an artist's work inside it.
  */
-const PACHKA_RETURN_ADDRESS: PostalAddress = {
-  recipient: "PACHKA",
-  line1: "ת.ד. 0000",
-  city: "תל אביב-יפו",
-  postalCode: "6100000",
-  countryCode: "IL",
-};
-
 export async function pachkaReturnAddress(db: Sql): Promise<PostalAddress> {
-  // `db` is unused only until the key is registered. It stays in the signature
-  // so that registering it is one line here and no change at any call site.
-  void db;
-  return PACHKA_RETURN_ADDRESS;
+  const value = await getConfig(db, "shipping.pachka_return_address");
+
+  for (const field of ["recipient", "line1", "city", "postalCode", "countryCode"] as const) {
+    const line = value[field];
+    if (typeof line !== "string" || line.trim() === "") {
+      throw AppError.conflict(`The configured PACHKA return address is missing "${field}".`, {
+        code: "shipping.return_address_not_configured",
+        details: { field },
+      });
+    }
+  }
+
+  return value;
 }
 
 /**
  * How long the artist has to confirm or dispute a return that has been
  * forwarded to them before the case escalates to an admin.
- *
- * TODO(config): register `returns.artist_response_window_days`, integer,
- * default 7, bounds 1..90.
  *
  * This window exists because of SECURITY.md SPEC-E: artist silence must not
  * hold a buyer's money. In this module's design the refund has already been
@@ -66,20 +71,19 @@ export async function pachkaReturnAddress(db: Sql): Promise<PostalAddress> {
  * buyer's refund. It still needs a deadline, or a claim stays open forever.
  */
 export async function artistResponseWindowDays(db: Sql): Promise<number> {
-  void db;
-  return 7;
+  return getConfig(db, "returns.artist_response_window_days");
 }
 
 /**
  * Whether a refund gives back the outbound shipping the buyer paid.
  *
- * TODO(config): register `returns.refund_includes_outbound_shipping`, boolean,
- * default false -- and see the report: this is a legal question about Israeli
- * distance-selling law, not an engineering preference, and the default below
- * is the conservative reading (the buyer bears return shipping, and the
- * outbound leg was performed), not a decision this module is entitled to make.
+ * UNDECIDED, and deliberately held in configuration rather than in code
+ * because it is a legal question about Israeli distance-selling law rather than
+ * an engineering preference. The seeded default is the conservative reading —
+ * the buyer bears return shipping, and the outbound leg was performed — not a
+ * decision this module is entitled to make. When the answer arrives it is an
+ * operator change, not a release.
  */
 export async function refundIncludesOutboundShipping(db: Sql): Promise<boolean> {
-  void db;
-  return false;
+  return getConfig(db, "returns.refund_includes_outbound_shipping");
 }

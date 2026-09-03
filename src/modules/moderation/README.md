@@ -64,15 +64,17 @@ module writes another module's tables.
 ARCHITECTURE.md's dependency table allows moderation → artworks, so
 `takedown.ts` imports `removeArtwork` directly.
 
-## Config keys this module needs registered
+## Config keys this module reads
 
-`moderation.operator_email` is already registered. Reporting needs two more,
-which are **not** registered yet. They are used, so until they land they are
-literals in `rate-limit.ts` marked `// TODO(config):` — the only two magic
-numbers in this module.
+All three are registered in `shared/config/registry.ts` and seeded by a
+migration; there are no magic numbers left in this module. `rate-limit.ts`
+reads the two below through `reportRateLimit(db)`, so an operator under a flood
+can tighten the limit without a deployment — which is the situation the setting
+exists for, and the worst possible moment to need a release.
 
-| Key | Type | Default in code | Why |
+| Key | Type | Default | Why |
 |---|---|---|---|
+| `moderation.operator_email` | string | — | Address that receives new-report notifications |
 | `moderation.report_window_minutes` | integer | 60 | Window over which reports are counted, per client |
 | `moderation.report_max_per_window` | integer | 10 | Reports permitted per window. Flooding must be refused **without** inflating the recorded count |
 

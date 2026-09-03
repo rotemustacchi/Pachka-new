@@ -42,11 +42,8 @@ import {
 import type { ArtworksDeps } from "./deps";
 import { centimetresToMillimetres } from "./dimensions";
 import {
-  MAX_DESCRIPTION_LENGTH,
-  MAX_EDITION_SIZE,
-  MAX_MOODS,
-  MAX_STYLES,
-  MAX_TARGET_SPACES,
+  listingLimits,
+  type ListingLimits,
 } from "./limits";
 import { assertTransition, type Actor } from "./lifecycle";
 import { availabilityFor, lockArtworkForUpdate, type Availability } from "./inventory";
@@ -114,12 +111,17 @@ export interface ArtworkInput {
 }
 
 const Title = z.string().trim().min(2).max(120);
-const Description = z.string().trim().min(1).max(MAX_DESCRIPTION_LENGTH);
 const Materials = z.string().trim().min(2).max(400);
 
-const InputSchema = z.object({
+/**
+ * Built per call rather than once at module load, because two of its bounds are
+ * operator-configurable now and a schema frozen at import time would hold
+ * whatever they were when the process started.
+ */
+const inputSchema = (limits: ListingLimits) =>
+  z.object({
   title: Title.nullish(),
-  description: Description.nullish(),
+  description: z.string().trim().min(1).max(limits.maxDescriptionLength).nullish(),
   priceAgorot: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullish(),
   heightCm: z.number().positive().nullish(),
   widthCm: z.number().positive().nullish(),
@@ -134,12 +136,12 @@ const InputSchema = z.object({
   targetSpaces: z.array(z.string()).optional(),
   moods: z.array(z.string()).optional(),
   inventoryType: z.enum(["unique", "edition"]).optional(),
-  stock: z.number().int().min(1).max(MAX_EDITION_SIZE).optional(),
+  stock: z.number().int().min(1).max(limits.maxEditionSize).optional(),
   madeToOrder: z.boolean().optional(),
   productionLeadTimeDays: z.number().int().min(0).max(365).nullish(),
-  affirmsOriginality: z.boolean().optional(),
-  aiAssisted: z.boolean().nullish(),
-});
+    affirmsOriginality: z.boolean().optional(),
+    aiAssisted: z.boolean().nullish(),
+  });
 
 /** Free-text fields that reach a public page, and therefore the contact scanner. */
 const SCANNED_FIELDS = ["title", "description", "materials"] as const;
@@ -213,8 +215,8 @@ interface NormalisedInput {
   readonly aiAssisted: boolean | null | undefined;
 }
 
-function normalise(input: ArtworkInput): NormalisedInput {
-  const parsed = InputSchema.safeParse(input);
+function normalise(limits: ListingLimits, input: ArtworkInput): NormalisedInput {
+  const parsed = inputSchema(limits).safeParse(input);
   if (!parsed.success) {
     const fields: Record<string, string[]> = {};
     for (const issue of parsed.error.issues) {
@@ -246,20 +248,20 @@ function normalise(input: ArtworkInput): NormalisedInput {
     styles:
       value.styles === undefined
         ? undefined
-        : (capped("styles", parseTaxonomyList("styles", value.styles), MAX_STYLES, "סגנונות") as readonly Style[]),
+        : (capped("styles", parseTaxonomyList("styles", value.styles), limits.maxStyles, "סגנונות") as readonly Style[]),
     targetSpaces:
       value.targetSpaces === undefined
         ? undefined
         : (capped(
             "target_spaces",
             parseTaxonomyList("target_spaces", value.targetSpaces),
-            MAX_TARGET_SPACES,
+            limits.maxTargetSpaces,
             "חללים",
           ) as readonly TargetSpace[]),
     moods:
       value.moods === undefined
         ? undefined
-        : (capped("moods", parseTaxonomyList("moods", value.moods), MAX_MOODS, "וייבים") as readonly Mood[]),
+        : (capped("moods", parseTaxonomyList("moods", value.moods), limits.maxMoods, "וייבים") as readonly Mood[]),
     inventoryType: value.inventoryType,
     stock: value.stock,
     madeToOrder: value.madeToOrder,
@@ -410,7 +412,7 @@ export async function createDraft(
   input: ArtworkInput = {},
 ): Promise<Artwork> {
   await assertActive(deps.db, artistId);
-  const normalised = normalise(input);
+  const normalised = normalise(await listingLimits(deps.db), input);
 
   return deps.db.withTransaction(async (tx) => {
     const created = await tx.one<{ id: string }>(
@@ -454,7 +456,7 @@ export async function updateArtwork(
   input: ArtworkInput,
 ): Promise<Artwork> {
   await assertActive(deps.db, artistId);
-  const normalised = normalise(input);
+  const normalised = normalise(await listingLimits(deps.db), input);
 
   return deps.db.withTransaction(async (tx) => {
     const existing = await loadForActor(tx, artworkId, artistId, "artist");
@@ -502,7 +504,7 @@ export async function publishArtwork(
   // `account_status` for itself.
   await assertEmailVerified(deps.db, artistId, "publish");
 
-  const normalised = normalise(input);
+  const normalised = normalise(await listingLimits(deps.db), input);
 
   return deps.db.withTransaction(async (tx) => {
     const existing = await loadForActor(tx, artworkId, artistId, "artist");

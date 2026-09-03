@@ -23,7 +23,7 @@ import { AppError } from "@/shared/errors";
 import type { Sql } from "@/shared/db";
 import { explainFindings, scanForContactDetails } from "@/modules/accounts";
 import type { ArtworksDeps } from "./deps";
-import { MAX_IMAGES_PER_ARTWORK } from "./limits";
+import { listingLimits } from "./limits";
 import type { PublicArtworkImage } from "./serialize";
 
 export interface ArtworkImage {
@@ -170,11 +170,12 @@ export async function attachImage(
       [artworkId],
     );
 
-    if (Number(next.total) >= MAX_IMAGES_PER_ARTWORK) {
-      throw AppError.validation(
-        `An artwork may carry at most ${MAX_IMAGES_PER_ARTWORK} images.`,
-        { code: "artworks.too_many_images", details: { max: MAX_IMAGES_PER_ARTWORK } },
-      );
+    const { maxImagesPerArtwork } = await listingLimits(tx);
+    if (Number(next.total) >= maxImagesPerArtwork) {
+      throw AppError.validation(`An artwork may carry at most ${maxImagesPerArtwork} images.`, {
+        code: "artworks.too_many_images",
+        details: { max: maxImagesPerArtwork },
+      });
     }
 
     const row = await tx.one<ImageRow>(

@@ -22,7 +22,7 @@ import {
   publishArtwork,
   updateArtwork,
   AI_ASSISTED_LABEL,
-  MAX_STYLES,
+  listingLimits,
   type ArtworkInput,
   type ArtworksDeps,
 } from "@/modules/artworks";
@@ -170,7 +170,10 @@ describe("the taxonomy is a closed, server-defined set", () => {
       }),
     ).rejects.toMatchObject({
       code: "artworks.taxonomy_axis_over_cap",
-      details: { axis: "styles", max: MAX_STYLES },
+      // From app_config, not from a constant: the cap is operator-tunable, and
+      // a test that hard-coded three would stop meaning anything the first time
+      // somebody tuned it.
+      details: { axis: "styles", max: (await listingLimits(database.db)).maxStyles },
     });
   });
 

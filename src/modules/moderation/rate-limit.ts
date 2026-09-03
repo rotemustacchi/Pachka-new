@@ -29,18 +29,36 @@
  * every client that has ever used the endpoint.
  */
 import { createHash } from "node:crypto";
+import { getConfig } from "@/shared/config";
 import type { Sql } from "@/shared/db";
 import { AppError } from "@/shared/errors";
 
 export type ModerationRateLimitBucket = "report";
 
-// TODO(config): register `moderation.report_window_minutes` (integer, default
-// 60) and `moderation.report_max_per_window` (integer, default 10) in
-// shared/config/registry.ts, then read them with getConfig here. Reported to
-// the lead architect; these literals are the placeholder in the meantime and
-// are the only two magic numbers in this module.
-export const REPORT_WINDOW_MINUTES = 60;
-export const REPORT_MAX_PER_WINDOW = 10;
+export interface ReportRateLimit {
+  /** Window over which attempts are counted. */
+  readonly windowMinutes: number;
+  /** Attempts permitted in that window. */
+  readonly maxPerWindow: number;
+}
+
+/**
+ * The configured limit, from `app_config`.
+ *
+ * ARCHITECTURE.md: every configurable number lives in `app_config`, read
+ * through `shared/config`. These were the only two magic numbers in this
+ * module; they are now `moderation.report_window_minutes` and
+ * `moderation.report_max_per_window`, so an operator under a flood can tighten
+ * the limit without a deployment — which is the situation the setting exists
+ * for and the worst possible moment to need a release.
+ */
+export async function reportRateLimit(db: Sql): Promise<ReportRateLimit> {
+  const [windowMinutes, maxPerWindow] = await Promise.all([
+    getConfig(db, "moderation.report_window_minutes"),
+    getConfig(db, "moderation.report_max_per_window"),
+  ]);
+  return { windowMinutes, maxPerWindow };
+}
 
 /**
  * Hash a subject for storage.
@@ -66,13 +84,15 @@ export async function consumeReportRateLimit(
   db: Sql,
   clientFingerprint: string,
 ): Promise<void> {
+  const { windowMinutes, maxPerWindow } = await reportRateLimit(db);
+
   const { count } = await db.one<{ count: string }>(
     `select count(*)::text as count
        from moderation_rate_limit_events
       where bucket = 'report'
         and subject = $1
         and occurred_at > now() - make_interval(mins => $2::int)`,
-    [clientFingerprint, REPORT_WINDOW_MINUTES],
+    [clientFingerprint, windowMinutes],
   );
 
   await db.query(
@@ -80,7 +100,7 @@ export async function consumeReportRateLimit(
     [clientFingerprint],
   );
 
-  if (Number(count) >= REPORT_MAX_PER_WINDOW) {
+  if (Number(count) >= maxPerWindow) {
     // `rate_limited`, which maps to 429 -- not `conflict`/409. The distinction
     // is not pedantry: 409 tells a client its request disagrees with the
     // current state, when in fact the identical request succeeds once the
@@ -91,7 +111,7 @@ export async function consumeReportRateLimit(
       code: "moderation.rate_limited",
       details: {
         bucket: "report" satisfies ModerationRateLimitBucket,
-        retryAfterMinutes: REPORT_WINDOW_MINUTES,
+        retryAfterMinutes: windowMinutes,
       },
     });
   }
@@ -103,11 +123,15 @@ export async function consumeReportRateLimit(
  */
 export async function pruneModerationRateLimitEvents(
   db: Sql,
-  olderThanMinutes = REPORT_WINDOW_MINUTES * 24,
+  olderThanMinutes?: number,
 ): Promise<number> {
+  // A day's worth of windows by default, so a counter outlives its own window
+  // by a wide margin and the sweep can run on any schedule at all.
+  const cutoff = olderThanMinutes ?? (await reportRateLimit(db)).windowMinutes * 24;
+
   const { rowCount } = await db.query(
     "delete from moderation_rate_limit_events where occurred_at < now() - make_interval(mins => $1::int)",
-    [olderThanMinutes],
+    [cutoff],
   );
   return rowCount;
 }

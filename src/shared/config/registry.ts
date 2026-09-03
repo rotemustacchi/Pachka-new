@@ -17,6 +17,24 @@
 
 export type ConfigValueType = "integer" | "number" | "string" | "boolean" | "json";
 
+/**
+ * The shape of `shipping.pachka_return_address`.
+ *
+ * Declared here rather than imported from `modules/shipping`, because
+ * `shared/*` may not depend on a module (ARCHITECTURE.md, module boundary
+ * rules). The module's own `PostalAddress` is structurally identical and is
+ * what validates a stored value on the way in; this is the registry's
+ * compiled-in fallback for a key whose row is missing.
+ */
+export interface PostalAddressValue {
+  readonly recipient: string;
+  readonly line1: string;
+  readonly line2?: string;
+  readonly city: string;
+  readonly postalCode: string;
+  readonly countryCode: string;
+}
+
 /** Inclusive numeric range a stored value must fall within. See CONFIG_BOUNDS. */
 export interface ConfigBounds {
   readonly min: number;
@@ -107,10 +125,62 @@ export const CONFIG_REGISTRY = {
     "Target size of the display derivative (~300 KB).",
   ),
 
+  // Artworks. How much of the taxonomy one listing may claim — SECURITY.md
+  // S2-20 item 2, "cap the shape": claiming every style and every target space
+  // maximises taxonomy overlap in the matchmaker's scoring function and ranks
+  // the artwork into every result set. Distinct from the cardinality check
+  // constraints in the artworks migration, which are absolute ceilings equal to
+  // the size of each closed set; these are how many an artist MAY pick.
+  "artworks.max_styles": key<number>(
+    "integer",
+    3,
+    "Most styles one artwork may claim. SECURITY.md S2-20 item 2.",
+  ),
+  "artworks.max_target_spaces": key<number>(
+    "integer",
+    3,
+    "Most target spaces one artwork may claim. SECURITY.md S2-20 item 2.",
+  ),
+  "artworks.max_moods": key<number>(
+    "integer",
+    2,
+    "Most moods one artwork may claim. SECURITY.md S2-20 item 2.",
+  ),
+  "artworks.max_description_length": key<number>(
+    "integer",
+    4000,
+    "Longest stored description. Matches the check constraint on the column.",
+  ),
+  "artworks.max_images_per_artwork": key<number>(
+    "integer",
+    8,
+    "Most images one artwork may carry. Position is 0-based, so the last is this minus one.",
+  ),
+  "artworks.max_edition_size": key<number>(
+    "integer",
+    250,
+    "Largest edition an artist may declare. An unbounded edition is an unbounded reservation fan-out.",
+  ),
+
   "shipping.unshipped_grace_days": key<number>(
     "integer",
     3,
     "Business days past the stated lead time before a fulfilment is chased.",
+  ),
+
+  // PLACEHOLDER default. The real PO box is seeded in the migration and is an
+  // operator setting, because it changes when the box moves and that is not a
+  // deployment. The shape is validated where it is read.
+  "shipping.pachka_return_address": key<PostalAddressValue>(
+    "json",
+    {
+      recipient: "PACHKA",
+      line1: "PLACEHOLDER PO BOX",
+      city: "Tel Aviv-Yafo",
+      postalCode: "6100000",
+      countryCode: "IL",
+    },
+    "The PACHKA-operated return address. Every return routes through it so that no artist address is printed on a shipping label.",
   ),
 
   "returns.window_days": key<number>("integer", 14, "Days a buyer has to request a return."),
@@ -118,6 +188,19 @@ export const CONFIG_REGISTRY = {
     "integer",
     14,
     "Days a requested return may go unreceived before it is escalated.",
+  ),
+  "returns.artist_response_window_days": key<number>(
+    "integer",
+    7,
+    "Days an artist has to confirm or dispute a forwarded return before it escalates to an admin.",
+  ),
+  // UNDECIDED: a question about Israeli distance-selling law rather than an
+  // engineering preference. `false` is the conservative reading — the buyer
+  // bears return shipping, and the outbound leg was performed.
+  "returns.refund_includes_outbound_shipping": key<boolean>(
+    "boolean",
+    false,
+    "Whether a refund returns the outbound shipping the buyer paid.",
   ),
   "returns.cancellation_fee_rate": key<number>(
     "number",
@@ -131,6 +214,16 @@ export const CONFIG_REGISTRY = {
     "Days after delivery before a payout becomes eligible.",
   ),
 
+  "moderation.report_window_minutes": key<number>(
+    "integer",
+    60,
+    "Window over which report attempts are counted, per hashed client fingerprint.",
+  ),
+  "moderation.report_max_per_window": key<number>(
+    "integer",
+    10,
+    "Report attempts permitted per window. Counted whether or not the attempt is allowed.",
+  ),
   "moderation.operator_email": key<string>(
     "string",
     "",
@@ -220,6 +313,22 @@ export const CONFIG_BOUNDS: Partial<Record<ConfigKey, ConfigBounds>> = {
   // Israeli consumer law permits a cancellation fee of at most 5%.
   "returns.cancellation_fee_rate": { min: 0, max: 0.05 },
   "shipping.unshipped_grace_days": { min: 0, max: 60 },
+  "returns.artist_response_window_days": { min: 1, max: 90 },
+
+  // Taxonomy caps. Zero means no artist can classify anything and the
+  // matchmaker has nothing to score on; the whole closed set is the abuse
+  // S2-20 describes, with the cap switched off.
+  "artworks.max_styles": { min: 1, max: 10 },
+  "artworks.max_target_spaces": { min: 1, max: 10 },
+  "artworks.max_moods": { min: 1, max: 10 },
+  "artworks.max_description_length": { min: 200, max: 4000 },
+  "artworks.max_images_per_artwork": { min: 1, max: 20 },
+  "artworks.max_edition_size": { min: 1, max: 10000 },
+
+  // Reporting. Zero permitted reports closes the surface an abuse victim
+  // reaches for.
+  "moderation.report_window_minutes": { min: 1, max: 1440 },
+  "moderation.report_max_per_window": { min: 1, max: 1000 },
 
   // Matchmaker. Weights and normalised scores are fractions of one; a weight
   // above one lets a single signal swamp every other.

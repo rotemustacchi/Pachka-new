@@ -176,13 +176,7 @@ export {
   type ImpressionSource,
 } from "./deps";
 
-export {
-  MAX_EDITION_SIZE,
-  MAX_IMAGES_PER_ARTWORK,
-  MAX_MOODS,
-  MAX_STYLES,
-  MAX_TARGET_SPACES,
-} from "./limits";
+export { listingLimits, type ListingLimits } from "./limits";
 
 // ---- User-facing components. Built on `shared/ui` primitives, so the
 // brush-stroke button, the tag chip and the sold overlay are the approved
