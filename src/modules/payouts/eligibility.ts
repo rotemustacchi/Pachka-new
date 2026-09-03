@@ -256,16 +256,37 @@ export async function payoutViewsForArtist(
 }
 
 /**
+ * A lock namespace of this module's own, so an advisory lock taken here cannot
+ * collide with one taken elsewhere. `moderation`'s audit chain trigger uses the
+ * single-argument form with a fixed key; the two-argument form gives a
+ * per-entry key inside a per-module namespace.
+ */
+const PAYOUT_LOCK_NAMESPACE = 918_273_645;
+
+/**
  * One payout, by the id of its `sale` entry.
  *
- * `forUpdate` takes a row lock on the sale entry. Settlement passes it, and that
- * is what makes two operators clicking the same button at the same moment
- * serialise: the second waits, then re-reads and finds the settlement the first
- * one appended. `select ... for update` does not fire the append-only trigger --
- * it locks the row, it does not write it -- so the lock and the immutability
- * coexist. The partial unique index is still there underneath as the structural
- * guarantee (SECURITY.md S1-10 item 4); the lock exists to turn a constraint
- * violation into a sentence an operator can read.
+ * `forUpdate` serialises concurrent operators on this entry. Settlement passes
+ * it, and that is what makes two people clicking the same button at the same
+ * moment take turns: the second waits, then re-reads and finds the settlement
+ * the first one appended, and is refused with a sentence rather than a
+ * constraint violation.
+ *
+ * WHY AN ADVISORY LOCK AND NOT `select ... for update`
+ * ----------------------------------------------------
+ * Because `select ... for update` requires the UPDATE privilege on the table,
+ * and this table grants UPDATE to nobody -- which is the entire point of it.
+ * The row lock and the append-only grants are mutually exclusive, and the
+ * append-only grants win: they are what SECURITY.md S1-14's argument rests on,
+ * and mutual exclusion between two protections is exactly the kind of thing
+ * that gets quietly resolved by granting the privilege "just for the lock".
+ *
+ * `pg_advisory_xact_lock` needs no privilege, is released at commit or rollback
+ * with no cleanup path to forget, and serialises the same callers on the same
+ * key. The partial unique index is still underneath as the structural guarantee
+ * (SECURITY.md S1-10 item 4): a lock is a promise about this process, an index
+ * is a promise about the database, and the second is the one that holds when the
+ * first is bypassed.
  */
 export async function payoutViewById(
   sql: Sql,
@@ -274,14 +295,18 @@ export async function payoutViewById(
   options: { readonly forUpdate?: boolean } = {},
 ): Promise<PayoutView | null> {
   if (options.forUpdate) {
-    // Locked first, in its own statement: `for update` cannot be applied to the
-    // left-joined query above without also trying to lock the outer-joined
-    // relations, which Postgres refuses.
-    const locked = await sql.maybeOne<{ id: string }>(
-      "select id from payout_ledger where id = $1 and entry_type = 'sale' for update",
+    // Existence first, so a bad id is a not-found rather than a lock nobody
+    // will ever contend for. Safe to check before locking precisely because the
+    // table is append-only: a sale entry that exists cannot stop existing.
+    const found = await sql.maybeOne<{ id: string }>(
+      "select id from payout_ledger where id = $1 and entry_type = 'sale'",
       [entryId],
     );
-    if (locked === null) return null;
+    if (found === null) return null;
+    await sql.query("select pg_advisory_xact_lock($1, hashtext($2))", [
+      PAYOUT_LOCK_NAMESPACE,
+      entryId,
+    ]);
   }
 
   const row = await sql.maybeOne<PayoutViewRow>(`${PAYOUT_VIEW_SQL} and l.id = $2`, [

@@ -19,13 +19,14 @@
  * query ran first."
  *
  * So the operator's queue is a display and never an authority. The sale entry is
- * locked, the same query the queue used is re-run against the locked row, and
- * the decision is made from that. Two operators submitting at once serialise on
- * the lock; the second re-reads, sees the settlement the first appended, and is
- * refused with a sentence rather than a constraint violation -- though the
- * partial unique index is still underneath as the structural guarantee, because
- * a lock is a promise about this process and an index is a promise about the
- * database.
+ * locked -- with an advisory lock, because `for update` needs an UPDATE
+ * privilege this table grants to nobody; see `payoutViewById` -- the same query
+ * the queue used is re-run, and the decision is made from that. Two operators
+ * submitting at once serialise on the lock; the second re-reads, sees the
+ * settlement the first appended, and is refused with a sentence rather than a
+ * constraint violation -- though the partial unique index is still underneath as
+ * the structural guarantee, because a lock is a promise about this process and
+ * an index is a promise about the database.
  *
  * WHY A CORRECTION IS AN INSERT
  * -----------------------------
