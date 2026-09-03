@@ -1,0 +1,31 @@
+-- Let the server call the artist-upgrade function it is the only caller of.
+--
+-- Owner: accounts
+--
+-- Forward-only and additive: see db/README.md. No down migration exists.
+--
+-- 20260827T140100 created `accounts.grant_artist_role(uuid)` as the single
+-- place the literal 'artist' appears, and then locked it down:
+--
+--   revoke all on function accounts.grant_artist_role(uuid) from public;
+--
+-- with the comment "Callable only by the privileged server connection". That
+-- revoke is right and stays. What was missing is the other half: nothing was
+-- ever granted back to `service_role`, so after the revoke the function was
+-- callable by nobody at all except a role bypassing the check entirely.
+--
+-- The artist upgrade therefore worked in tests -- where the connection was a
+-- superuser -- and would have failed in production for every artist with
+-- "permission denied for function grant_artist_role", unless the deployed role
+-- happened to be a superuser too. Exactly the class of failure ARCHITECTURE.md's
+-- non-superuser test rule exists to surface; it surfaced the moment the harness
+-- stopped connecting as one.
+--
+-- Note that this grants EXECUTE and nothing else. The function is still
+-- SECURITY DEFINER with `set search_path = ''`, it still hard-codes 'artist',
+-- and it is still in the `accounts` schema, which is not exposed on the data
+-- API. `anon` and `authenticated` get nothing: a signed-in user who could
+-- invoke this through PostgREST would be performing an unauthenticated
+-- self-upgrade, which is the attack the original revoke was written against.
+
+grant execute on function accounts.grant_artist_role(uuid) to service_role;
