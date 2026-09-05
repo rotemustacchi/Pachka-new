@@ -376,6 +376,28 @@ export async function recordOperatorReceipt(
     });
   }
 
+  // Validate before branching, not by falling through to the else.
+  //
+  // This read `if (condition === "damaged")` with everything else treated as
+  // intact — so a caller passing "as_described", or any typo, took the
+  // refund-and-restock path. The database CHECK on received_condition never
+  // saw the bad value, because the intact branch writes the literal 'intact'.
+  //
+  // A returns admin form posting a raw string is exactly how that arrives, and
+  // the failure is silent and expensive: money released and a piece put back on
+  // sale on a value nobody meant. Every other parse boundary in this codebase
+  // rejects rather than defaults, and so does this one now.
+  if (input.condition !== "damaged" && input.condition !== "intact") {
+    throw AppError.validation(
+      `"${String(input.condition)}" is not a recorded condition. Use "intact" or "damaged".`,
+      {
+        code: "returns.condition_invalid",
+        details: { returnId: input.returnId, condition: String(input.condition) },
+        fields: { condition: ["יש לבחור: תקין או פגום"] },
+      },
+    );
+  }
+
   if (input.condition === "damaged") {
     const row = await db.one<ReturnRow>(
       `update returns

@@ -343,6 +343,32 @@ describe("a return that arrives intact", () => {
     expect(result.returnCase.refundAuthorisedAt).not.toBeNull();
   });
 
+  it("refuses a condition it does not recognise, rather than treating it as intact", async () => {
+    const parties = await seedParties(database);
+    const returnId = await openReturn(database.db, parties, { itemSubtotalAgorot: 400_000 });
+
+    // The bug this replaces: the branch asked `condition === "damaged"` and let
+    // everything else fall through to intact — which releases the buyer's money
+    // and puts the artwork back on sale. A returns admin form posting a raw
+    // string is exactly how a value like this arrives.
+    await expect(
+      recordOperatorReceipt(database.db, {
+        returnId,
+        operatorId: parties.operatorId,
+        condition: "as_described" as never,
+      }),
+    ).rejects.toMatchObject({ kind: "validation", code: "returns.condition_invalid" });
+
+    // And nothing happened: no refund, no receipt, the case still open. A guard
+    // that threw after writing would be worse than none.
+    const row = await database.db.one<{ received_at: Date | null; status: string }>(
+      "select received_at, status from returns where id = $1",
+      [returnId],
+    );
+    expect(row.received_at).toBeNull();
+    expect(row.status).toBe("requested");
+  });
+
   it("refunds the full subtotal when no cancellation fee is configured", async () => {
     const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties, { itemSubtotalAgorot: 400_000 });
