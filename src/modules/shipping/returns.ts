@@ -30,7 +30,16 @@
 import { getConfig } from "@/shared/config";
 import { AppError } from "@/shared/errors";
 import type { Sql } from "@/shared/db";
-import { addAgorot, fromDbValue, splitCommission, toDbValue, nonNegativeAgorot, type Agorot } from "@/shared/money";
+import {
+  addAgorot,
+  subtractAgorot,
+  toAgorot,
+  fromDbValue,
+  splitCommission,
+  toDbValue,
+  nonNegativeAgorot,
+  type Agorot,
+} from "@/shared/money";
 import { addCalendarDays } from "./business-days";
 import { artistResponseWindowDays, pachkaReturnAddress, refundIncludesOutboundShipping, type PostalAddress } from "./config";
 import { returnTerms, type ReturnTerms } from "./terms";
@@ -302,10 +311,28 @@ interface RefundFigures {
  * Reusing it means the cancellation fee rounds the same way the commission
  * does and is covered by the same property test.
  */
+/**
+ * The statutory ceiling on a cancellation fee: ₪100, in agorot.
+ *
+ * Israeli consumer law caps the fee at 5% of the transaction OR ₪100,
+ * WHICHEVER IS LOWER. The registry bounds the rate at 5% and stops there, so
+ * the percentage alone was being charged — lawful-looking on any small piece
+ * and unlawful on a large one. At the 5% maximum the two rules cross at
+ * ₪2,000: above that, the percentage exceeds the cap and the cap governs.
+ */
+const STATUTORY_FEE_CEILING_AGOROT = toAgorot(10_000);
+
 async function refundFor(db: Sql, row: ReturnRow): Promise<RefundFigures> {
   const rate = await getConfig(db, "returns.cancellation_fee_rate");
   const subtotal = fromDbValue(row.item_subtotal_agorot);
-  const { commission: feeAgorot, net } = splitCommission(subtotal, rate);
+  const { commission: uncapped } = splitCommission(subtotal, rate);
+
+  // Whichever is lower, then derive the net by subtraction rather than reusing
+  // splitCommission's: capping the fee without recomputing the net would leave
+  // fee + refund short of the subtotal, which is money vanishing.
+  const feeAgorot =
+    uncapped > STATUTORY_FEE_CEILING_AGOROT ? STATUTORY_FEE_CEILING_AGOROT : uncapped;
+  const net = subtractAgorot(subtotal, feeAgorot);
 
   const includeOutbound = await refundIncludesOutboundShipping(db);
   const refundAgorot = includeOutbound ? addAgorot(net, fromDbValue(row.shipping_agorot)) : net;

@@ -369,6 +369,42 @@ describe("a return that arrives intact", () => {
     expect(row.status).toBe("requested");
   });
 
+  it("caps the cancellation fee at the statutory ₪100, not just at 5%", async () => {
+    const parties = await seedParties(database);
+    await setConfig(database.db, "returns.cancellation_fee_rate", 0.05);
+    // ₪5,000. Five percent is ₪250 — lawful as a rate, unlawful as a fee.
+    // Israeli law caps the fee at 5% OR ₪100, whichever is LOWER, and the two
+    // rules cross at ₪2,000. Only the percentage was being applied.
+    const returnId = await openReturn(database.db, parties, { itemSubtotalAgorot: 500_000 });
+
+    const result = await recordOperatorReceipt(database.db, {
+      returnId,
+      operatorId: parties.operatorId,
+      condition: "intact",
+    });
+
+    expect(result.refund?.feeAgorot).toBe(10_000);
+    // And the money still adds up: capping the fee without recomputing the net
+    // would leave fee + refund short of the subtotal.
+    expect(result.refund!.feeAgorot + result.refund!.refundAgorot).toBe(500_000);
+  });
+
+  it("still charges the percentage below the crossover, where it is the lower of the two", async () => {
+    const parties = await seedParties(database);
+    await setConfig(database.db, "returns.cancellation_fee_rate", 0.05);
+    // ₪1,000 — five percent is ₪50, under the ₪100 ceiling, so the rate governs.
+    // Without this the cap could be a flat fee and the test above would pass.
+    const returnId = await openReturn(database.db, parties, { itemSubtotalAgorot: 100_000 });
+
+    const result = await recordOperatorReceipt(database.db, {
+      returnId,
+      operatorId: parties.operatorId,
+      condition: "intact",
+    });
+
+    expect(result.refund?.feeAgorot).toBe(5_000);
+  });
+
   it("refunds the full subtotal when no cancellation fee is configured", async () => {
     const parties = await seedParties(database);
     const returnId = await openReturn(database.db, parties, { itemSubtotalAgorot: 400_000 });

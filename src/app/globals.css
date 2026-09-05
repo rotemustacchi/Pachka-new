@@ -78,7 +78,15 @@ body {
 @layer utilities {
   /*
    * Numerals and prices are always Latin and always LTR, even inside RTL
-   * text (design.md, "Typography"). Wrap any rendered number/price in this.
+   * text (design.md, "Typography").
+   *
+   * Wrap ONE number. Never wrap an expression that contains a separator: this
+   * sets `direction: ltr` over the whole run, so "2 / 5" renders as "5 / 2" and
+   * "3–7 ימים" reverses its range. Isolate each numeral in its own span and
+   * leave the separator outside, in the RTL context where it belongs.
+   *
+   * A price needs no wrapper at all — "₪1,250" already resolves LTR on its own,
+   * which is why the price sites that omit this class are correct.
    */
   .numeric {
     direction: ltr;

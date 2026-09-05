@@ -99,9 +99,20 @@ function ListingRow({ listing }: { readonly listing: DashboardListing }) {
               )}
             </Fact>
             <Fact label="מלאי">
-              {/* Derived, never a stored counter: stock minus reserved minus sold. */}
-              <span className="numeric">
-                {listing.availableUnits} / {listing.stock}
+              {/*
+                Derived, never a stored counter: stock minus reserved minus sold.
+
+                Each numeral is isolated SEPARATELY. Wrapping the whole
+                expression put `direction: ltr` around a run containing a
+                separator, which reverses the operands: an artist with 2 of 5
+                units left read "5 / 2". The slash is deliberately outside both
+                spans so it stays a plain RTL-context character between two
+                isolated numbers.
+              */}
+              <span>
+                <span className="numeric">{listing.availableUnits}</span>
+                {" / "}
+                <span className="numeric">{listing.stock}</span>
               </span>
             </Fact>
             <Fact label="חשיפות בהתאמות">
