@@ -26,8 +26,8 @@
  * IP is hashed here at the edge, so neither reaches a table in the clear.
  */
 import { NextResponse } from "next/server";
-import { captureNotifyRequest, depsWithoutMail, hashSubject } from "@/modules/matchmaker";
-import { getDatabase } from "@/shared/db";
+import { captureNotifyRequest, hashSubject } from "@/modules/matchmaker";
+import { matchmakerDeps } from "../deps";
 import { errorResponse } from "@/app/_lib/error-response";
 import { clientIp } from "@/app/_lib/request";
 import { acknowledgedHref } from "../answers";
@@ -39,7 +39,7 @@ export async function POST(request: Request): Promise<Response> {
   const queryId = form.get("matchQueryId") ?? form.get("queryId");
 
   try {
-    await captureNotifyRequest(depsWithoutMail(getDatabase()), {
+    await captureNotifyRequest(matchmakerDeps(), {
       email: form.get("email"),
       matchQueryId: typeof queryId === "string" && queryId !== "" ? queryId : null,
       clientFingerprint: hashSubject(await clientIp()),

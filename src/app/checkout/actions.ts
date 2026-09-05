@@ -50,6 +50,7 @@
  * which is where `CheckoutState` and `IDLE_CHECKOUT` therefore live.
  */
 import { redirect } from "next/navigation";
+import { dispatchAppNotifications } from "@/app/_lib/deps";
 import { formatAgorot } from "@/shared/money";
 import { isAppError } from "@/shared/errors";
 import {
@@ -167,6 +168,14 @@ export async function checkoutAction(
       ...(Number.isSafeInteger(shown) && shown > 0 ? { displayedTotalAgorot: shown } : {}),
     });
     orderId = result.order.id;
+
+    // Dispatch AFTER the order is committed, and never before. These carry the
+    // manual payment instructions — the buyer has no other way to learn what to
+    // do next, since the manual adapter takes no money at checkout.
+    //
+    // `dispatchAppNotifications` neither throws nor rejects: a mail outage must
+    // not fail an order that already exists and already holds inventory.
+    await dispatchAppNotifications(result.notifications);
   } catch (error) {
     return asState(error);
   }
