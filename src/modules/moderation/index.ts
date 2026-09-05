@@ -35,9 +35,11 @@ export {
   fileReport,
   isReportReason,
   openReportCount,
-  queueItemUrl,
+  recordReportNotification,
+  MODERATION_TEMPLATES,
   type FileReportInput,
   type FileReportResult,
+  type ModerationTemplate,
   type ReportReason,
   type ReportSubject,
 } from "./reports";
@@ -88,8 +90,6 @@ export { noFlaggedUploads, payoutLedgerUnavailable } from "./ports";
 export type {
   FlaggedUpload,
   FlaggedUploadSource,
-  Mailer,
-  OutboundMessage,
   OutstandingPayouts,
   PayoutLedgerPort,
 } from "./ports";

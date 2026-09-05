@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache";
 import { currentUserId } from "../_lib/viewer";
 import type { FormState } from "../_lib/form-state";
 import { moderationDepsForAction } from "./deps";
+import { dispatchAppNotifications } from "../_lib/deps";
 import {
   reinstateFromForm,
   resolveFromForm,
@@ -36,7 +37,10 @@ export async function takeDownArtworkAction(
   _prev: FormState,
   form: FormData,
 ): Promise<FormState> {
-  const state = await takeDownFromForm(await moderationDepsForAction(), await currentUserId(), form);
+  const deps = await moderationDepsForAction();
+  const state = await takeDownFromForm(deps, await currentUserId(), form, (requests) =>
+    dispatchAppNotifications(requests, deps.db),
+  );
   if (state.status === "ok") refresh();
   return state;
 }

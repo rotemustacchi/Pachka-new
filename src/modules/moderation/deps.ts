@@ -2,10 +2,12 @@
  * What the moderation module needs handed to it.
  *
  * The database is real in every test (ARCHITECTURE.md test policy: the database
- * is never mocked, and neither is PACHKA's own code). `auth` and `mailer` are
- * the external boundaries -- Supabase Auth and the mail server -- and are the
- * only things a test is permitted to fake. `payouts` and `uploads` are ports
- * standing in for modules that have not shipped; see ./ports.
+ * is never mocked, and neither is PACHKA's own code). `auth` is the one
+ * external boundary left, and the only thing a test here is permitted to fake.
+ * There is no `mailer`: this module returns notification descriptors and sends
+ * nothing, so mail is not a dependency it can be handed or forget. `payouts`
+ * and `uploads` are ports standing in for modules that have not shipped; see
+ * ./ports.
  *
  * `artworks` is NOT a port. It has shipped, and ARCHITECTURE.md's dependency
  * table allows moderation -> artworks, so takedown imports it directly. What it
@@ -16,7 +18,7 @@
 import { depsWithoutOrdersOrMatchmaker, type ArtworksDeps } from "@/modules/artworks";
 import type { AuthGateway } from "@/modules/accounts";
 import type { Database } from "@/shared/db";
-import type { FlaggedUploadSource, Mailer, PayoutLedgerPort } from "./ports";
+import type { FlaggedUploadSource, PayoutLedgerPort } from "./ports";
 
 export interface ModerationDeps {
   readonly db: Database;
@@ -25,8 +27,6 @@ export interface ModerationDeps {
    * and session tokens belong to Supabase Auth, not to us.
    */
   readonly auth: AuthGateway;
-  /** The mail server. Absent means notifications are recorded as undelivered. */
-  readonly mailer?: Mailer;
   /** Absent until the payouts module ships; see `payoutLedgerUnavailable`. */
   readonly payouts?: PayoutLedgerPort;
   /** Absent until the uploads module ships; see `noFlaggedUploads`. */
@@ -37,11 +37,12 @@ export interface ModerationDeps {
    * but `orders` must supply the real one when it ships.
    */
   readonly artworks?: ArtworksDeps;
-  /**
-   * Base URL for links in outbound mail. The composition root should pass
-   * `publicEnv().NEXT_PUBLIC_SITE_URL`; see `queueItemUrl`.
+  /*
+   * There is no `siteUrl` here any more. It existed so this module could paste
+   * an absolute queue link into an email body it composed. It composes nothing
+   * now, the descriptor carries the subject's type and id, and the origin comes
+   * from `NEXT_PUBLIC_SITE_URL` at the one place that already reads it.
    */
-  readonly siteUrl?: string;
 }
 
 /**

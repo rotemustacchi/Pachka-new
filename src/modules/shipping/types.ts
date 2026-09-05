@@ -2,6 +2,7 @@
  * The vocabulary `shipping` exposes. Everything here is what another module --
  * in practice `orders` -- passes in or gets back.
  */
+import type { NotificationRequest as MailNotificationRequest } from "@/shared/mail";
 import type { Agorot } from "@/shared/money";
 
 /**
@@ -100,16 +101,10 @@ export type NotificationAudience = "buyer" | "artist" | "admin";
 /**
  * Something that needs telling, handed back to the caller rather than sent.
  *
+ * THE shared descriptor, narrowed to the audiences this module addresses.
  * Shipping does not own a mail transport and does not take one as a dependency.
  * The caller dispatches these. That keeps the one genuinely external boundary
  * -- mail -- out of this module entirely, which is also why not a single test
  * in this module needs a fake.
  */
-export interface NotificationRequest {
-  readonly audience: NotificationAudience;
-  /** Stable template identifier. Callers switch on this, never on prose. */
-  readonly template: string;
-  /** The account to notify. Absent for `admin`, which is an operator queue. */
-  readonly recipientId?: string;
-  readonly data: Readonly<Record<string, unknown>>;
-}
+export type NotificationRequest = MailNotificationRequest<NotificationAudience>;

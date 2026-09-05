@@ -12,8 +12,10 @@
  * keeps the assertion from passing vacuously against a surface that refuses
  * everyone or has no data to refuse.
  *
- * Nothing is mocked except Supabase Auth, which is an external boundary and the
- * only fake ARCHITECTURE.md's test policy allows.
+ * Nothing is mocked except Supabase Auth and the mail provider's HTTP endpoint,
+ * both external boundaries and the only fakes ARCHITECTURE.md's test policy
+ * allows. The endpoint is injected as `fetch`, so no test here can reach the
+ * network.
  */
 import { describe, expect, it } from "vitest";
 import { grantAdminRole, useTestDatabase, type TestDatabase } from "../harness";
@@ -27,6 +29,12 @@ import {
   type ModerationDeps,
 } from "@/modules/moderation";
 import { setRate, upsertTier, upsertZone } from "@/modules/shipping";
+import {
+  createResendMailer,
+  dispatchNotifications,
+  type FetchLike,
+} from "@/shared/mail";
+import { addressBook, type NotificationDispatcher } from "@/app/_lib/deps";
 import { adminOrNotFound } from "@/app/admin/access";
 import {
   reinstateFromForm,
@@ -44,6 +52,41 @@ const REFUSAL = "Not found";
 
 function depsFor(db: Database): ModerationDeps {
   return { db, auth: new FakeAuthGateway() };
+}
+
+/**
+ * A real dispatcher, wired the way the Server Action wires it.
+ *
+ * `moderation` returns notification descriptors and sends nothing, so the
+ * takedown form is handed one of these. It is built from the composition root's
+ * own `addressBook` and a real Resend adapter whose `fetch` is a fake endpoint,
+ * which is what makes "the artist was told" and "the artist was not told" two
+ * outcomes a test can produce on purpose rather than assert about a stub.
+ */
+function dispatcherFor(db: Database): {
+  dispatch: NotificationDispatcher;
+  posted: { to: readonly string[]; subject: string; text: string }[];
+} {
+  const posted: { to: readonly string[]; subject: string; text: string }[] = [];
+  const fetch: FetchLike = async (_url, init) => {
+    posted.push(JSON.parse(init.body) as { to: string[]; subject: string; text: string });
+    return { ok: true, status: 200, text: async () => "{}" };
+  };
+  const mailer = createResendMailer({
+    apiKey: "re_test",
+    from: "PACHKA <hello@pachka.test>",
+    fetch,
+  });
+
+  return {
+    posted,
+    dispatch: (requests) =>
+      dispatchNotifications(
+        mailer,
+        { addresses: addressBook(db), siteUrl: "https://pachka.test" },
+        requests,
+      ),
+  };
 }
 
 async function seedAccount(
@@ -153,7 +196,12 @@ describe("a non-admin submitting an admin form", () => {
         outcome: "dismissed",
         note: "looks fine",
       })),
-      await takeDownFromForm(deps, buyerId, formOf({ artworkId, reason: "stolen" })),
+      await takeDownFromForm(
+        deps,
+        buyerId,
+        formOf({ artworkId, reason: "stolen" }),
+        dispatcherFor(database.db).dispatch,
+      ),
       await suspendFromForm(deps, buyerId, formOf({ userId: artistId, reason: "fraud" })),
       await reinstateFromForm(deps, buyerId, formOf({ userId: artistId })),
       await setRateFromForm(database.db, buyerId, formOf({
@@ -189,7 +237,9 @@ describe("a non-admin submitting an admin form", () => {
       status: "error",
       message: REFUSAL,
     });
-    expect(await takeDownFromForm(deps, buyerId, empty)).toEqual({
+    expect(
+      await takeDownFromForm(deps, buyerId, empty, dispatcherFor(database.db).dispatch),
+    ).toEqual({
       status: "error",
       message: REFUSAL,
     });
@@ -279,21 +329,25 @@ describe("an admin working the queue", () => {
     expect(await listQueue(deps, adminId)).toHaveLength(1);
   });
 
-  it("takes an artwork down, and says whether the artist was actually told", async () => {
+  it("takes an artwork down, and says so when the artist could not be told", async () => {
+    // This artist has no `artist_contact_details` row, so the address book has
+    // nothing to resolve and the notice is reported as undelivered. The admin
+    // must be told that, or they will not follow up by hand.
     const adminId = await seedAccount(database, ["admin"], "Admin A.");
     const artistId = await seedArtist(database);
     const artworkId = await seedPublishedArtwork(database.db, artistId);
-    // No mailer wired, which is the deployment's real state today.
     const deps = depsFor(database.db);
+    const { dispatch, posted } = dispatcherFor(database.db);
 
     const state = await takeDownFromForm(deps, adminId, formOf({
       artworkId,
       reason: "Not the artist's own work",
       note: "Matches a stock photograph.",
-    }));
+    }), dispatch);
 
     expect(state.status).toBe("ok");
     expect(state.message).toContain("לא נשלחה");
+    expect(posted).toEqual([]);
 
     const { rows } = await database.db.query<{ status: string }>(
       "select status from artworks where id = $1",
@@ -305,12 +359,44 @@ describe("an admin working the queue", () => {
     expect(audit).toHaveLength(1);
   });
 
+  it("says the artist WAS told when the notice actually reached the provider", async () => {
+    // The other half, which the message above is only meaningful against: with
+    // a contact address on file the notice is composed from the descriptor,
+    // addressed out of the private contact table, and posted.
+    const adminId = await seedAccount(database, ["admin"], "Admin A2.");
+    const artistId = await seedArtist(database, "Tamar T.");
+    await database.db.query(
+      "insert into artist_contact_details (user_id, email) values ($1, $2)",
+      [artistId, "tamar@artists.test"],
+    );
+    const artworkId = await seedPublishedArtwork(database.db, artistId);
+    const deps = depsFor(database.db);
+    const { dispatch, posted } = dispatcherFor(database.db);
+
+    const state = await takeDownFromForm(deps, adminId, formOf({
+      artworkId,
+      reason: "undeclared_ai",
+      note: "Generated.",
+    }), dispatch);
+
+    expect(state.status).toBe("ok");
+    expect(state.message).toContain("האמן קיבל הודעה");
+    expect(posted).toHaveLength(1);
+    expect(posted[0]!.to).toEqual(["tamar@artists.test"]);
+    expect(posted[0]!.text).toContain("Undeclared AI generation");
+  });
+
   it("requires a reason for a takedown", async () => {
     const adminId = await seedAccount(database, ["admin"], "Admin A.");
     const artistId = await seedArtist(database);
     const artworkId = await seedPublishedArtwork(database.db, artistId);
 
-    const state = await takeDownFromForm(depsFor(database.db), adminId, formOf({ artworkId }));
+    const state = await takeDownFromForm(
+      depsFor(database.db),
+      adminId,
+      formOf({ artworkId }),
+      dispatcherFor(database.db).dispatch,
+    );
 
     expect(state.status).toBe("error");
     expect(state.fields?.reason?.[0]).toBeTruthy();

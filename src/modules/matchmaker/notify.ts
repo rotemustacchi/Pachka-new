@@ -31,34 +31,64 @@
  * THE RESPONSE IS THE SAME SHAPE, ALWAYS
  * --------------------------------------
  * "the response is identical both times and does not disclose that the address
- * was already stored." `captureNotifyRequest` returns one value with no fields,
- * so there is nothing on it that could vary — not a boolean, not a created-at,
- * not an id. A timing difference remains theoretically observable; a response
- * body difference does not, because there is no body to differ.
+ * was already stored." `acknowledged` is the only thing a caller may put in
+ * front of a visitor, it is `true` in every case, and `NOTIFY_ACKNOWLEDGEMENT`
+ * is a constant phrased conditionally. A timing difference remains
+ * theoretically observable; an observable response difference does not exist,
+ * because there is nothing for the route to vary on.
  *
- * A send failure is swallowed for the same reason. If a provider outage turned
- * into a 502 for stored addresses and a 200 for new ones, the failure path
- * would become the membership oracle the success path was carefully built not
- * to be.
+ * `notifications` is the other field, and it is NOT a response. It is the work
+ * list the composition root dispatches after this returns, and it is empty in
+ * exactly the cases where nothing should be sent — an address already
+ * confirmed, or one whose confirmation window has not reopened. A route that
+ * branched on its length would rebuild the membership oracle by hand; the rule
+ * is that it goes to `dispatchAppNotifications` and nowhere else, and the route
+ * that does this is a dozen lines long so that the rule is checkable by eye.
+ *
+ * THIS MODULE NO LONGER SENDS, WHICH REMOVES THE LAST WAY TO LEAK
+ * --------------------------------------------------------------
+ * It used to compose the confirmation and hand it to a `Mailer`, wrapping the
+ * call in a `catch` that swallowed everything — because a provider outage that
+ * produced a 502 for stored addresses and a 200 for new ones would be the very
+ * oracle the rest of this file exists to prevent. That `catch` is now
+ * structural rather than remembered: the send happens in
+ * `dispatchNotifications`, which never throws, on the far side of a function
+ * that has already returned the same value either way.
  */
 import { randomBytes } from "node:crypto";
 import type { Database, Sql } from "@/shared/db";
 import { AppError } from "@/shared/errors";
+import type { NotificationRequest } from "@/shared/mail";
 import { matchmakerRateLimits } from "./config";
 import { consumeNotifyRateLimit, hashSubject } from "./rate-limit";
-import type { Mailer } from "./ports";
+
+/** Every template this module emits. */
+export const MATCHMAKER_TEMPLATES = {
+  notifyConfirmation: "matchmaker.notify_confirmation",
+} as const;
+
+export type MatchmakerTemplate =
+  (typeof MATCHMAKER_TEMPLATES)[keyof typeof MATCHMAKER_TEMPLATES];
 
 /**
- * The only thing the capture ever returns.
+ * What the capture returns.
  *
- * Deliberately empty. See the header: a field is a thing that can differ, and
- * every difference between the two cases is a membership oracle.
+ * `acknowledged` is the visitor-facing half and is deliberately constant: a
+ * field is a thing that can differ, and every difference between the two cases
+ * is a membership oracle. `notifications` is the caller-facing half and is
+ * deliberately NOT visitor-facing; see the header.
  */
 export interface NotifyCaptureResult {
   readonly acknowledged: true;
+  /**
+   * Zero or one descriptor, for the composition root to dispatch after this
+   * returns. Empty means nothing is to be sent, which is a normal outcome and
+   * not a failure.
+   */
+  readonly notifications: readonly NotificationRequest<"subscriber">[];
 }
 
-const ACKNOWLEDGED: NotifyCaptureResult = { acknowledged: true };
+const ACKNOWLEDGED_ONLY: NotifyCaptureResult = { acknowledged: true, notifications: [] };
 
 /** What a buyer sees either way. One string, so there is only one to read. */
 export const NOTIFY_ACKNOWLEDGEMENT =
@@ -108,11 +138,16 @@ export interface NotifyCaptureInput {
   readonly clientFingerprint: string;
 }
 
+/**
+ * A database, and nothing else.
+ *
+ * There is no `confirmUrl` here any more either. The token travels in the
+ * descriptor's `data` and the root builds the link, which is where the
+ * deployment's origin already lived — the function this used to take was only
+ * ever a way to borrow it.
+ */
 export interface NotifyDeps {
   readonly db: Database;
-  readonly mailer: Mailer;
-  /** Where a confirmation link points. Supplied by `src/app`; never user input. */
-  readonly confirmUrl: (confirmationToken: string) => string;
 }
 
 /**
@@ -162,31 +197,27 @@ export async function captureNotifyRequest(
     );
     if (claimed.rowCount === 0) return null;
 
-    return { email, confirmationToken: row.confirmation_token };
+    return { subscriptionId: row.id, confirmationToken: row.confirmation_token };
   });
 
-  if (outcome !== null) {
-    try {
-      await deps.mailer.send({
-        to: outcome.email,
-        subject: "אישור הרשמה לעדכונים מפצ׳קה",
-        body:
-          "קיבלנו בקשה לעדכן אתכם כשיגיעו עבודות שמתאימות לתשובות שלכם.\n" +
-          `לאישור: ${deps.confirmUrl(outcome.confirmationToken)}\n` +
-          "אם זה לא אתם, אפשר להתעלם מההודעה ולא יישלח אליכם דבר נוסף.",
-      });
-    } catch (error) {
-      // Swallowed on purpose. See the header: a provider outage that produced a
-      // different status for a stored address than for a new one would be the
-      // membership oracle everything else here exists to prevent. The address
-      // is not logged — SECURITY.md's redaction list names it explicitly.
-      console.error("matchmaker: notify-me confirmation could not be sent", {
-        code: error instanceof Error ? error.name : "unknown",
-      });
-    }
-  }
+  if (outcome === null) return ACKNOWLEDGED_ONLY;
 
-  return ACKNOWLEDGED;
+  return {
+    acknowledged: true,
+    notifications: [
+      {
+        audience: "subscriber",
+        template: MATCHMAKER_TEMPLATES.notifyConfirmation,
+        // The subscription's row id, not the address. SECURITY.md's redaction
+        // list names notify-me addresses, and a descriptor is a thing that gets
+        // logged; the root reads the address back out of `notify_requests`,
+        // which also means an address that unsubscribed in between is simply
+        // not there to be written to.
+        recipientId: outcome.subscriptionId,
+        data: { confirmationToken: outcome.confirmationToken },
+      },
+    ],
+  };
 }
 
 /**

@@ -33,6 +33,7 @@ import {
   appMailer,
   dispatchNotifications,
   type AddressBook,
+  type AddressLookup,
   type NotificationContext,
   type NotificationOutcome,
   type NotificationRequest,
@@ -98,28 +99,41 @@ export function certificatesDeps(db: Database = getDatabase()): CertificatesDeps
 // Mail
 // ---------------------------------------------------------------------------
 //
-// Until now nothing in this application sent anything. `checkout/actions.ts`
-// says so in its own header — "No mailer is wired anywhere in this application
-// yet" — and `admin/deps.ts` listed `mailer` under "what is deliberately
-// absent". The transport now exists in `src/shared/mail`, and this is where it
-// is handed out.
+// Until recently nothing in this application sent anything. `checkout/actions.ts`
+// said so in its own header, and `admin/deps.ts` listed `mailer` under "what is
+// deliberately absent". The transport now exists in `src/shared/mail`, and this
+// is where it is handed out.
 //
-// The four modules that need mail do not agree on how to ask for it, and this
-// file does not try to make them agree. `matchmaker` and `moderation` take a
-// `Mailer` and send for themselves; `orders`, `payouts`, `shipping` and
-// `certificates` return notification descriptors and expect this root to
-// dispatch them. `appMailer()` serves the first pair directly. `addressBook()`
-// and `dispatchNotifications` serve the second.
+// There is exactly one way in. All six notification-producing modules --
+// `orders`, `payouts`, `shipping`, `certificates`, `matchmaker`, `moderation` --
+// return `NotificationRequest` descriptors and send nothing; `addressBook()`
+// resolves who, the shared template table says what, and
+// `dispatchAppNotifications` delivers. Two of those six used to take a `Mailer`
+// and compose their own copy. They no longer do, which is why there is one
+// dispatcher here and no adapter objects.
+
+/**
+ * A dispatcher, as a type, so a form or an action can be handed one.
+ *
+ * `queue-forms.ts` takes one of these rather than reaching for
+ * `dispatchAppNotifications` itself: an admin form has to be able to say
+ * whether the artist was actually told, and a test has to be able to make that
+ * answer both yes and no without a global.
+ */
+export type NotificationDispatcher = (
+  requests: readonly NotificationRequest[],
+) => Promise<NotificationOutcome[]>;
 
 /**
  * Where a notification's address comes from, by audience.
  *
- * Three sources, because PACHKA keeps three kinds of address in three places
- * and each has its own rule:
+ * Four sources, because PACHKA keeps four kinds of address in four places and
+ * each has its own rule:
  *
  *   artist — `artist_contact_details`, which has ALL GRANTS REVOKED from anon
  *     and authenticated and is reachable only through this privileged
- *     connection. `moderation/takedown.ts` reads it exactly this way.
+ *     connection. `moderation/takedown.ts` used to read it exactly this way,
+ *     and now hands over an artist id instead.
  *   buyer  — Supabase auth, which is the only place a buyer's address exists.
  *     There is no `email` column on `profiles`, deliberately: the migration
  *     notes that an anonymously-readable column whose name contains `email` is
@@ -127,20 +141,35 @@ export function certificatesDeps(db: Database = getDatabase()): CertificatesDeps
  *   admin  — `moderation.operator_email` from `app_config`. An operator queue
  *     is not a person, which is why an `admin` descriptor carries no
  *     `recipientId` for this function to use.
+ *   subscriber — `notify_requests`, by row id. The notify-me list is anonymous:
+ *     the address belongs to nobody with an account, so it is looked up here
+ *     rather than travelling in a descriptor that gets logged. Reading it at
+ *     dispatch time rather than at capture time also means an address that
+ *     unsubscribed in between resolves to nothing and is not written to.
  *
- * A missing address returns null rather than raising. `dispatchNotifications`
- * records that as an undelivered message, which is the honest outcome and not
- * a reason to fail the order that produced it.
+ * A missing address is reported, never raised, and the REASON travels with it.
+ * "The artist has no contact address on file" is ordinary; an unset
+ * `moderation.operator_email` is an operational failure that ships with an
+ * empty default and a "Must be set before launch" note. Both end up in a
+ * `notification_error` an operator can query, so the resolver that knows the
+ * difference is the one that says it.
  */
 export function addressBook(db: Database = getDatabase()): AddressBook {
   return {
-    async addressFor(audience: string, recipientId?: string): Promise<string | null> {
+    async addressFor(audience: string, recipientId?: string): Promise<AddressLookup> {
       if (audience === "admin") {
         const configured = (await getConfig(db, "moderation.operator_email")).trim();
-        return configured.length > 0 ? configured : null;
+        return configured.length > 0
+          ? { address: configured }
+          : {
+              address: null,
+              reason: "No operator address is configured (moderation.operator_email)",
+            };
       }
 
-      if (recipientId === undefined || recipientId === "") return null;
+      if (recipientId === undefined || recipientId === "") {
+        return { address: null, reason: "No recipient was named" };
+      }
 
       if (audience === "artist") {
         const row = await db.maybeOne<{ email: string | null }>(
@@ -148,16 +177,31 @@ export function addressBook(db: Database = getDatabase()): AddressBook {
           [recipientId],
         );
         const email = row?.email?.trim() ?? "";
-        return email.length > 0 ? email : null;
+        return email.length > 0
+          ? { address: email }
+          : { address: null, reason: "The artist has no contact address on file" };
       }
 
       if (audience === "buyer") {
         const { data } = await createSupabaseServiceRoleClient().auth.admin.getUserById(recipientId);
         const email = data.user?.email?.trim() ?? "";
-        return email.length > 0 ? email : null;
+        return email.length > 0
+          ? { address: email }
+          : { address: null, reason: "No address on file for this recipient" };
       }
 
-      return null;
+      if (audience === "subscriber") {
+        const row = await db.maybeOne<{ email: string | null }>(
+          "select email from notify_requests where id = $1",
+          [recipientId],
+        );
+        const email = row?.email?.trim() ?? "";
+        return email.length > 0
+          ? { address: email }
+          : { address: null, reason: "That subscription no longer exists" };
+      }
+
+      return { address: null, reason: `No address book for audience "${audience}"` };
     },
   };
 }
@@ -168,7 +212,8 @@ export function addressBook(db: Database = getDatabase()): AddressBook {
  * `siteUrl` is supplied here rather than by any module, because
  * `certificates/notifications.ts` refuses to build a URL: "a template that
  * received a finished URL would be a template that could be pointed somewhere
- * else by whatever built it."
+ * else by whatever built it." The notify-me confirmation link and the admin
+ * queue link are built from this for the same reason.
  */
 export function notificationContext(db: Database = getDatabase()): NotificationContext {
   return { addresses: addressBook(db), siteUrl: publicEnv().NEXT_PUBLIC_SITE_URL };

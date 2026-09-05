@@ -10,25 +10,31 @@
  * set or nothing, a client identifier or nothing, a subject that actually
  * exists, and a rate limit that survives its own refusal.
  *
- * WHY THE MAIL IS SENT AFTER THE COMMIT, WHEN THE AUDIT ROW IS NOT
- * ----------------------------------------------------------------
+ * WHY THE ALERT IS NOT SENT HERE AT ALL, WHEN THE AUDIT ROW IS WRITTEN HERE
+ * -------------------------------------------------------------------------
  * `suspension.ts` goes to some trouble to put the audit row inside the action's
- * transaction, and this file deliberately does the opposite with the operator
- * email. They are not inconsistent: the audit row is a CONTROL -- an action
+ * transaction, and this file deliberately does not do that with the operator
+ * alert. They are not inconsistent: the audit row is a CONTROL -- an action
  * that commits unaudited is the failure SECURITY.md S1-14 is about -- whereas
  * the notification is a COURTESY, and the spec is explicit that losing it must
  * not lose the report: "the notification email cannot be sent -> the report is
- * still recorded in the admin queue and the failure is logged". Sending inside
- * the transaction would also hold a database connection open across an SMTP
- * round trip, which is its own problem.
+ * still recorded in the admin queue and the failure is logged".
  *
- * The outcome is written onto the report row rather than only logged, because
+ * This file used to honour that with a `try`/`catch` around a `Mailer.send`,
+ * which meant the guarantee held only as long as nobody deleted the `catch`.
+ * `fileReport` now RETURNS the alert as a `NotificationRequest` and sends
+ * nothing, so the report is committed and the function has returned before any
+ * mail is attempted. The guarantee is structural: there is no send here to
+ * fail, and no database connection held open across an SMTP round trip either.
+ *
+ * The outcome still reaches the row. `recordReportNotification` is how -- the
+ * caller dispatches, gets back what happened, and writes it here -- because
  * "and the failure is logged" needs to be something an operator can query for
- * -- "which reports did we never hear about" -- and something a test can assert.
+ * ("which reports did we never hear about") and something a test can assert.
  */
-import { getConfig } from "@/shared/config";
 import { AppError } from "@/shared/errors";
 import type { Sql, Tx } from "@/shared/db";
+import type { NotificationRequest } from "@/shared/mail";
 import type { ModerationDeps } from "./deps";
 import { consumeReportRateLimit, hashSubject } from "./rate-limit";
 
@@ -90,11 +96,24 @@ export interface FileReportResult {
    * rows that exist. Never a stored counter -- see the migration header.
    */
   readonly reportCount: number;
-  readonly notified: boolean;
-  readonly notificationError: string | null;
+  /**
+   * The operator's alert, for the caller to dispatch now that the report is
+   * committed. Always exactly one; the operator's address is configuration, so
+   * whether one is configured is not a question this module can answer.
+   */
+  readonly notifications: readonly NotificationRequest<"admin">[];
   /** What the visitor is shown. The spec asks for a confirmation of receipt. */
   readonly message: string;
 }
+
+/** Every template this module emits. */
+export const MODERATION_TEMPLATES = {
+  reportFiled: "moderation.report_filed",
+  artworkTakenDown: "moderation.artwork_taken_down",
+} as const;
+
+export type ModerationTemplate =
+  (typeof MODERATION_TEMPLATES)[keyof typeof MODERATION_TEMPLATES];
 
 const RECEIPT = "Thank you. Your report has been sent to the PACHKA team for review.";
 
@@ -142,22 +161,58 @@ export async function fileReport(
     return { reportId: row.id, subjectType: subject.type, subjectId: subject.id };
   });
 
-  // Committed. Everything from here on can fail without costing the report.
-  const notification = await notifyOperator(deps, {
-    reportId: recorded.reportId,
-    subjectType: recorded.subjectType,
-    subjectId: recorded.subjectId,
-    reason,
-    details,
-  });
-
+  // Committed. Nothing from here on can cost the report, because nothing from
+  // here on does anything but describe it.
   return {
     ...recorded,
     reportCount: await openReportCount(deps.db, recorded.subjectType, recorded.subjectId),
-    notified: notification.sent,
-    notificationError: notification.error,
+    notifications: [
+      {
+        audience: "admin",
+        template: MODERATION_TEMPLATES.reportFiled,
+        // No `recipientId`: the operator queue is not a person, and its address
+        // is `moderation.operator_email` in `app_config`.
+        data: {
+          reportId: recorded.reportId,
+          subjectType: recorded.subjectType,
+          subjectId: recorded.subjectId,
+          reason,
+          // The label as well as the enum, because the operator reads the words
+          // the reporter chose from and not `undeclared_ai`. Resolved here,
+          // where the set is defined, rather than in a mail layer that would
+          // have to import this module to know it.
+          reasonLabel: REPORT_REASON_LABELS[reason],
+          ...(details === null ? {} : { details }),
+        },
+      },
+    ],
     message: RECEIPT,
   };
+}
+
+/**
+ * Write what happened to the alert onto the report row.
+ *
+ * Called by whoever dispatched the descriptor, with what the dispatch reported.
+ * Separate from `fileReport` on purpose: this module does not send, so it
+ * cannot know, and a function that pretended to would be back to composing its
+ * own answer. `notified_at` is set only on success, which keeps the query an
+ * operator actually wants -- "which reports were we never told about" -- a
+ * plain `where notified_at is null`.
+ */
+export async function recordReportNotification(
+  sql: Sql,
+  reportId: string,
+  outcome: { readonly sent: boolean; readonly error: string | null },
+): Promise<void> {
+  const error = outcome.sent ? null : (outcome.error ?? "Unknown mail failure");
+  await sql.query(
+    `update reports
+        set notified_at = case when $2::text is null then now() else null end,
+            notification_error = $2
+      where id = $1`,
+    [reportId, error],
+  );
 }
 
 /** Open reports against one subject. Derived on every read; never stored. */
@@ -241,84 +296,4 @@ async function resolveSubject(
     throw AppError.notFound("No such artist", { code: "moderation.subject_not_found" });
   }
   return { type: "artist", id: row.user_id };
-}
-
-interface NotificationSubject {
-  readonly reportId: string;
-  readonly subjectType: "artwork" | "artist";
-  readonly subjectId: string;
-  readonly reason: ReportReason;
-  readonly details: string | null;
-}
-
-/**
- * Tell the operator, and record what happened either way.
- *
- * Never throws. The report is already committed by the time this runs, and the
- * spec requires that it stay committed whatever the mail server does.
- */
-async function notifyOperator(
-  deps: ModerationDeps,
-  subject: NotificationSubject,
-): Promise<{ sent: boolean; error: string | null }> {
-  const record = async (error: string | null): Promise<{ sent: boolean; error: string | null }> => {
-    await deps.db.query(
-      `update reports
-          set notified_at = case when $2::text is null then now() else null end,
-              notification_error = $2
-        where id = $1`,
-      [subject.reportId, error],
-    );
-    return { sent: error === null, error };
-  };
-
-  try {
-    const to = (await getConfig(deps.db, "moderation.operator_email")).trim();
-    if (to.length === 0) {
-      // Registered with an empty default and "Must be set before launch". An
-      // unset address is an operational failure, recorded like any other rather
-      // than silently reported as a successful notification.
-      return record("No operator address is configured (moderation.operator_email)");
-    }
-    if (!deps.mailer) {
-      return record("No mailer is wired in");
-    }
-
-    await deps.mailer.send({
-      to,
-      subject: `New PACHKA report: ${subject.subjectType} ${subject.subjectId}`,
-      body: notificationBody(deps, subject),
-    });
-    return record(null);
-  } catch (cause) {
-    return record(cause instanceof Error ? cause.message.slice(0, 500) : "Unknown mail failure");
-  }
-}
-
-function notificationBody(deps: ModerationDeps, subject: NotificationSubject): string {
-  return [
-    `A new report has been filed against ${subject.subjectType} ${subject.subjectId}.`,
-    ``,
-    `Reason: ${REPORT_REASON_LABELS[subject.reason]}`,
-    ...(subject.details ? [`Details: ${subject.details}`] : []),
-    ``,
-    `Queue item: ${queueItemUrl(deps, subject.subjectType, subject.subjectId)}`,
-  ].join("\n");
-}
-
-/**
- * A direct link to the admin queue item, which the spec requires the email to
- * carry.
- */
-export function queueItemUrl(
-  deps: ModerationDeps,
-  subjectType: "artwork" | "artist",
-  subjectId: string,
-): string {
-  // TODO(config): the composition root should pass
-  // `publicEnv().NEXT_PUBLIC_SITE_URL` as `deps.siteUrl`. Reading it here would
-  // couple this module to a parsed environment that every test would then have
-  // to populate, for a string that only appears in an email body.
-  const base = (deps.siteUrl ?? "http://localhost:3000").replace(/\/+$/, "");
-  return `${base}/admin/queue/${subjectType}/${subjectId}`;
 }

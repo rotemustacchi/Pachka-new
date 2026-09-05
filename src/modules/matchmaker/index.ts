@@ -40,11 +40,12 @@
  * IDS, never artworks: shaping an artwork for a buyer is
  * `artworks.toPublicArtwork`'s job and nobody else's, so this module has no way
  * to leak a column by assembling its own view. Hydrate the ids through
- * `catalog`. You also owe this module a `Mailer` and a `confirmUrl`
- * (`depsWithoutMail` is the honest stand-in until mail is wired), a hashed
- * client fingerprint per request — `hashSubject` at the edge, so a raw IP never
- * reaches this module at all — and a scheduled call to `pruneMatchQueries` and
- * `pruneMatchmakerRateLimitEvents`.
+ * `catalog`. You owe this module a hashed client fingerprint per request —
+ * `hashSubject` at the edge, so a raw IP never reaches this module at all — and
+ * a scheduled call to `pruneMatchQueries` and `pruneMatchmakerRateLimitEvents`.
+ * You also owe it a dispatcher: `captureNotifyRequest` RETURNS the confirmation
+ * as a `NotificationRequest` and sends nothing, so a root that ignores
+ * `result.notifications` is a root where nobody is ever confirmed.
  */
 
 // ---- The questionnaire: seven questions, one required, all closed sets.
@@ -128,7 +129,9 @@ export {
   confirmNotifyRequest,
   normaliseEmail,
   unsubscribeNotifyRequest,
+  MATCHMAKER_TEMPLATES,
   NOTIFY_ACKNOWLEDGEMENT,
+  type MatchmakerTemplate,
   type NotifyCaptureInput,
   type NotifyCaptureResult,
   type NotifyDeps,
@@ -157,11 +160,9 @@ export {
   type ScoringWeights,
 } from "./config";
 
-// ---- The external boundaries. There is exactly one, and it is not an AI provider.
-export { noMailer, type Mailer, type OutboundEmail } from "./ports";
-
-// ---- Dependencies this module is handed.
-export { depsWithoutMail, type MatchmakerDeps } from "./deps";
+// ---- Dependencies this module is handed. There is one, and it is a database:
+// no mail port, and — deliberately — no AI provider. See `deps.ts`.
+export { type MatchmakerDeps } from "./deps";
 
 // ---- User-facing views. Server Components throughout: no `"use client"` in
 // this module or below it, so no prop object reaches the RSC payload in the

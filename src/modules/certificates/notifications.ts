@@ -6,11 +6,11 @@
  *
  * Nothing here sends anything. The function returns `NotificationRequest[]` and
  * the composition root dispatches them AFTER the issuing transaction has
- * committed. The shape is `orders.NotificationRequest` deliberately — that
- * module says why, and the reason applies verbatim: "the composition root
- * dispatches both through one mail layer, and two shapes would mean two
- * dispatchers." It also keeps mail outside this module entirely, so the tests
- * assert what the message SAYS rather than that a mailer object was called.
+ * committed. The shape is the one shared descriptor every module now returns,
+ * for the reason all six of them gave separately: the composition root
+ * dispatches them through one mail layer, and a second shape would mean a
+ * second dispatcher. It also keeps mail outside this module entirely, so the
+ * tests assert what the message SAYS rather than that a mailer was called.
  *
  * WHAT THE MESSAGE CARRIES, AND WHAT IT MUST NOT
  * ----------------------------------------------
@@ -26,6 +26,7 @@
  * name. The buyer's own copy lives behind their signed-in order view. That
  * split is SPEC-B, and it is why an emailed link is safe to forward.
  */
+import type { NotificationRequest as MailNotificationRequest } from "@/shared/mail";
 
 /** Every template this module emits. */
 export const CERTIFICATE_TEMPLATES = {
@@ -36,16 +37,16 @@ export type CertificateTemplate =
   (typeof CERTIFICATE_TEMPLATES)[keyof typeof CERTIFICATE_TEMPLATES];
 
 /**
- * Structurally identical to `orders.NotificationRequest`. Declared rather than
- * imported so that a change to this module's messages cannot be made by editing
- * another module's file.
+ * THE shared descriptor, narrowed to the audiences this module addresses.
+ *
+ * This was once a separate declaration, on the argument that "a change to this
+ * module's messages cannot be made by editing another module's file". The
+ * argument protected the wrong thing: the MESSAGES are not here either, they
+ * are in the composition root's template table keyed by the identifiers in
+ * `CERTIFICATE_TEMPLATES`. What was duplicated was four field names, and four
+ * copies of four field names is how two of them quietly drift apart.
  */
-export interface NotificationRequest {
-  readonly audience: "buyer" | "artist" | "admin";
-  readonly template: string;
-  readonly recipientId?: string;
-  readonly data: Readonly<Record<string, unknown>>;
-}
+export type NotificationRequest = MailNotificationRequest<"buyer" | "artist" | "admin">;
 
 /**
  * One message per delivery, listing every certificate that delivery produced.

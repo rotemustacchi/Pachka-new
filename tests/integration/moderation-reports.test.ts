@@ -14,10 +14,20 @@
  *     the report back out of Postgres, not by checking that a fake was called.
  *     ARCHITECTURE.md: "Asserting that a mock was called is not a test."
  *
- * The mailer is faked, and it is the only thing here that is. It is an external
- * boundary in exactly the sense the test policy means -- a separate service
- * that owns delivery -- and the fake exists so that "delivery failed" is
- * something a test can cause on purpose.
+ * THERE IS NO FAKE IN THIS FILE AT ALL ANY MORE
+ * ---------------------------------------------
+ * There used to be a `FakeMailer`, because `fileReport` composed the operator's
+ * alert and sent it. It returns a `NotificationRequest` describing the alert
+ * now, and sends nothing, so there is nothing here to fake: the assertions are
+ * on the descriptor the module produced and on the row the database holds.
+ *
+ * The spec scenario -- "the notification email cannot be sent -> the report is
+ * still recorded in the admin queue and the failure is logged" -- is asserted
+ * in both halves. That a report SURVIVES a failed notification is now
+ * structural: `fileReport` never sends, so it cannot fail on the way. That the
+ * failure is LOGGED is `recordReportNotification`, exercised below with a
+ * failure outcome, and end to end against a genuinely refusing HTTP endpoint in
+ * `tests/integration/mail-delivery.test.ts`.
  */
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
@@ -37,27 +47,11 @@ import {
   listQueue,
   openReportCount,
   pruneModerationRateLimitEvents,
-  type Mailer,
+  recordReportNotification,
   type ModerationDeps,
-  type OutboundMessage,
 } from "@/modules/moderation";
 import { setConfig } from "@/shared/config";
 import type { Database } from "@/shared/db";
-
-// ---------------------------------------------------------------------------
-// The one fake: the mail server.
-// ---------------------------------------------------------------------------
-
-class FakeMailer implements Mailer {
-  readonly sent: OutboundMessage[] = [];
-  /** When set, every send rejects with this message, as a dead SMTP host would. */
-  failWith: string | null = null;
-
-  async send(message: OutboundMessage): Promise<void> {
-    if (this.failWith !== null) throw new Error(this.failWith);
-    this.sent.push(message);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Seeding. Every test builds its own; the database is thrown away afterwards.
@@ -119,8 +113,8 @@ async function seedPublishedArtwork(database: TestDatabase, artistId: string, ti
   return rows[0]!.id;
 }
 
-function depsFor(db: Database, mailer = new FakeMailer()): { deps: ModerationDeps; mailer: FakeMailer } {
-  return { deps: { db, auth: new FakeAuthGateway(), mailer }, mailer };
+function depsFor(db: Database): { deps: ModerationDeps } {
+  return { deps: { db, auth: new FakeAuthGateway() } };
 }
 
 /** The operator address is registered with an empty default and must be set. */
@@ -594,48 +588,85 @@ describe("report flooding", () => {
 describe("notifying the operator", () => {
   const database = useTestDatabase();
 
-  it("emails the configured address with the subject, the reason, and a link", async () => {
+  it("describes an alert naming the subject, the reason and the reporter's own words", async () => {
     const artistId = await seedArtist(database);
     const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db, "ops@pachka.example");
-    const { deps, mailer } = depsFor(database.db);
+    const { deps } = depsFor(database.db);
 
-    const result = await fileReport(
-      { ...deps, siteUrl: "https://pachka.example" },
+    const result = await fileReport(deps, {
+      subject: { type: "artwork", artworkId },
+      reason: "undeclared_ai",
+      details: "The brushwork is generated.",
+      clientId: "203.0.113.30",
+    });
+
+    // One descriptor, addressed to the operator queue rather than to a person.
+    expect(result.notifications).toEqual([
       {
-        subject: { type: "artwork", artworkId },
-        reason: "undeclared_ai",
-        details: "The brushwork is generated.",
-        clientId: "203.0.113.30",
+        audience: "admin",
+        template: "moderation.report_filed",
+        data: {
+          reportId: result.reportId,
+          subjectType: "artwork",
+          subjectId: artworkId,
+          reason: "undeclared_ai",
+          reasonLabel: "Undeclared AI generation",
+          details: "The brushwork is generated.",
+        },
       },
-    );
+    ]);
+    // No address anywhere on it. `ops@pachka.example` is configured and this
+    // module still does not know it, which is the point of the descriptor.
+    expect(JSON.stringify(result.notifications)).not.toContain("ops@pachka.example");
+    expect(result.notifications[0]).not.toHaveProperty("recipientId");
+  });
 
-    expect(result.notified).toBe(true);
-    expect(mailer.sent).toHaveLength(1);
-    const message = mailer.sent[0]!;
-    expect(message.to).toBe("ops@pachka.example");
-    expect(message.body).toContain(artworkId);
-    expect(message.body).toContain("Undeclared AI generation");
-    expect(message.body).toContain(`https://pachka.example/admin/queue/artwork/${artworkId}`);
+  it("says nothing about delivery until somebody tells it, and the row says so too", async () => {
+    // `fileReport` cannot report a delivery it did not attempt. The row starts
+    // un-notified with no error: nothing has happened to the alert yet, which
+    // is different from "it failed" and must not be recorded as either.
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
+    const { deps } = depsFor(database.db);
 
-    const row = await database.db.one<{ notified_at: Date | null; notification_error: string | null }>(
-      "select notified_at, notification_error from reports where id = $1",
-      [result.reportId],
-    );
-    expect(row.notified_at).not.toBeNull();
+    const result = await fileReport(deps, {
+      subject: { type: "artwork", artworkId },
+      reason: "other",
+      clientId: "203.0.113.33",
+    });
+
+    const row = await database.db.one<{
+      notified_at: Date | null;
+      notification_error: string | null;
+    }>("select notified_at, notification_error from reports where id = $1", [result.reportId]);
+    expect(row.notified_at).toBeNull();
     expect(row.notification_error).toBeNull();
+
+    await recordReportNotification(database.db, result.reportId, { sent: true, error: null });
+
+    const after = await database.db.one<{
+      notified_at: Date | null;
+      notification_error: string | null;
+    }>("select notified_at, notification_error from reports where id = $1", [result.reportId]);
+    expect(after.notified_at).not.toBeNull();
+    expect(after.notification_error).toBeNull();
   });
 
   it("still records the report when the email cannot be sent", async () => {
     // The spec scenario, and the assertion is on the report row rather than on
-    // the mailer: what has to survive a dead SMTP host is the queue item, not
-    // the call.
+    // any call: what has to survive a dead SMTP host is the queue item.
+    //
+    // Surviving is now structural — `fileReport` never sends, so there is no
+    // failure that could reach it — and what is exercised here is the other
+    // half of the sentence, "and the failure is logged". The failure travels
+    // back from whoever dispatched. `mail-delivery.test.ts` drives the same
+    // path with a transport that genuinely refuses.
     const adminId = await seedAccount(database, ["admin"], "Admin D.");
     const artistId = await seedArtist(database);
     const artworkId = await seedPublishedArtwork(database, artistId);
     await setOperatorAddress(database.db);
-    const { deps, mailer } = depsFor(database.db);
-    mailer.failWith = "smtp: connection refused";
+    const { deps } = depsFor(database.db);
 
     const result = await fileReport(deps, {
       subject: { type: "artwork", artworkId },
@@ -643,8 +674,12 @@ describe("notifying the operator", () => {
       clientId: "203.0.113.31",
     });
 
+    await recordReportNotification(database.db, result.reportId, {
+      sent: false,
+      error: "smtp: connection refused",
+    });
+
     // The report exists, is open, and is in the queue.
-    expect(result.notified).toBe(false);
     expect(result.reportCount).toBe(1);
 
     const row = await database.db.one<{
@@ -665,13 +700,40 @@ describe("notifying the operator", () => {
     expect(queue[0]!.subjectId).toBe(artworkId);
   });
 
-  it("records an unset operator address as the operational failure it is", async () => {
-    // `moderation.operator_email` ships with an empty default and "Must be set
-    // before launch". Silently reporting success would hide that until the
-    // first report nobody answered.
+  it("never silently records a failure as a success", async () => {
+    // A dispatcher that reports `sent: false` with nothing to say still leaves
+    // the row unambiguously un-notified. Recording `notified_at` here would
+    // hide a report nobody was told about, which is the exact failure
+    // `notification_error` exists to make queryable.
     const artistId = await seedArtist(database);
     const artworkId = await seedPublishedArtwork(database, artistId);
-    const { deps, mailer } = depsFor(database.db);
+    const { deps } = depsFor(database.db);
+
+    const result = await fileReport(deps, {
+      subject: { type: "artwork", artworkId },
+      reason: "other",
+      clientId: "203.0.113.34",
+    });
+
+    await recordReportNotification(database.db, result.reportId, { sent: false, error: null });
+
+    const row = await database.db.one<{
+      notified_at: Date | null;
+      notification_error: string | null;
+    }>("select notified_at, notification_error from reports where id = $1", [result.reportId]);
+    expect(row.notified_at).toBeNull();
+    expect(row.notification_error).toBe("Unknown mail failure");
+  });
+
+  it("files the report whether or not an operator address is configured", async () => {
+    // `moderation.operator_email` ships with an empty default and "Must be set
+    // before launch". Whether it is set is not this module's question any more
+    // -- the address book asks it, and records the answer as the operational
+    // failure it is; see `mail-delivery.test.ts`. What must not happen here is
+    // a report being refused, or an alert being skipped, because of it.
+    const artistId = await seedArtist(database);
+    const artworkId = await seedPublishedArtwork(database, artistId);
+    const { deps } = depsFor(database.db);
 
     const result = await fileReport(deps, {
       subject: { type: "artwork", artworkId },
@@ -679,9 +741,7 @@ describe("notifying the operator", () => {
       clientId: "203.0.113.32",
     });
 
-    expect(result.notified).toBe(false);
-    expect(result.notificationError).toMatch(/operator_email/);
-    expect(mailer.sent).toEqual([]);
+    expect(result.notifications).toHaveLength(1);
 
     const row = await database.db.one<{ status: string }>(
       "select status from reports where id = $1",

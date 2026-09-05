@@ -39,6 +39,7 @@
  */
 import { AppError } from "@/shared/errors";
 import type { Sql } from "@/shared/db";
+import type { NotificationRequest as MailNotificationRequest } from "@/shared/mail";
 
 /** Mirrors `moderation.AdminActor`. Structural, so no import is needed. */
 export interface PayoutAdminActor {
@@ -112,9 +113,13 @@ function unwired(): AppError {
 /**
  * The one genuinely external boundary this module has.
  *
- * Structurally identical to `orders.NotificationRequest` and
- * `shipping.NotificationRequest` on purpose: the composition root dispatches all
- * three through one mail layer, and a third shape would mean a third dispatcher.
+ * THE shared descriptor, narrowed to the two audiences a payout ever addresses:
+ * the artist being paid, and the operator who has to move the money by hand. A
+ * buyer is never told anything about a payout, and now the type says so.
+ *
+ * It used to be a third structurally identical declaration whose header
+ * explained that a third shape would mean a third dispatcher. The dispatcher
+ * was always going to be one; it is the type that had to stop being four.
  *
  * Nothing here sends anything. Every function that has something to tell
  * somebody RETURNS these and the caller dispatches them after the transaction
@@ -123,10 +128,4 @@ function unwired(): AppError {
  */
 export type PayoutNotificationAudience = "artist" | "admin";
 
-export interface PayoutNotificationRequest {
-  readonly audience: PayoutNotificationAudience;
-  readonly template: string;
-  /** The account to notify. Absent for `admin`, which is an operator queue. */
-  readonly recipientId?: string;
-  readonly data: Readonly<Record<string, unknown>>;
-}
+export type PayoutNotificationRequest = MailNotificationRequest<PayoutNotificationAudience>;

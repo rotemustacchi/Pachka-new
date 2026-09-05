@@ -100,18 +100,20 @@ export const noFlaggedUploads: FlaggedUploadSource = {
 // ---------------------------------------------------------------------------
 // mail
 // ---------------------------------------------------------------------------
-
-/**
- * The one genuinely external boundary in this module. ARCHITECTURE.md's test
- * policy allows a deterministic fake for mail and for nothing else.
- */
-export interface OutboundMessage {
-  readonly to: string;
-  readonly subject: string;
-  readonly body: string;
-}
-
-export interface Mailer {
-  /** Rejects when delivery fails. Callers must survive that (spec: "Notification delivery fails"). */
-  send(message: OutboundMessage): Promise<void>;
-}
+//
+// There is no mail port in this file any more, and its absence is the point.
+//
+// This module used to declare a `Mailer` taking a composed `{ to, subject,
+// body }`, compose the operator's alert and the artist's takedown notice
+// itself, and send them. It was typed optional, so every path that sent had to
+// remember to degrade when it was missing, and every test that exercised one
+// had to hand over a fake.
+//
+// `fileReport` and `takeDownArtwork` now RETURN `NotificationRequest`
+// descriptors, like the other five notification-producing modules, and the
+// composition root resolves the address, composes the words and delivers. The
+// copy moved with them, unchanged, into that root's template table. What the
+// spec requires of this module — that a report survives a notification that
+// could not be sent — is now structural rather than defended: there is no send
+// here to fail. `recordReportNotification` in `reports.ts` is how the outcome
+// still reaches the row an operator can query.

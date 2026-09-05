@@ -30,12 +30,12 @@
  */
 import { removeArtwork, type Artwork } from "@/modules/artworks";
 import { AppError } from "@/shared/errors";
-import type { Sql } from "@/shared/db";
+import type { NotificationRequest } from "@/shared/mail";
 import { withAdminAction } from "./admin";
 import { recordAdminAction, type AuditEntry } from "./audit";
 import type { ModerationDeps } from "./deps";
 import { artworksDepsOn } from "./deps";
-import { REPORT_REASON_LABELS, isReportReason } from "./reports";
+import { MODERATION_TEMPLATES, REPORT_REASON_LABELS, isReportReason } from "./reports";
 import { txAsDatabase } from "./tx-database";
 
 export interface TakeDownArtworkInput {
@@ -53,9 +53,13 @@ export interface TakeDownArtworkInput {
 export interface TakeDownArtworkResult {
   readonly artwork: Artwork;
   readonly audit: AuditEntry;
-  /** False when the artist could not be emailed. The takedown still stands. */
-  readonly artistNotified: boolean;
-  readonly notificationError: string | null;
+  /**
+   * The artist's notice, for the caller to dispatch now that the takedown is
+   * committed. Always exactly one: whether the artist has a contact address on
+   * file is a question for the address book, not for this module, and a
+   * takedown stands either way.
+   */
+  readonly notifications: readonly NotificationRequest<"artist">[];
 }
 
 export async function takeDownArtwork(
@@ -94,68 +98,43 @@ export async function takeDownArtwork(
   });
 
   // Committed. The artist's notice is a courtesy, and losing it must not undo a
-  // takedown -- the same reasoning `reports.ts` sets out for the operator email.
-  const notification = await notifyArtist(deps, outcome.artwork, reason);
-
+  // takedown -- the same reasoning `reports.ts` sets out for the operator alert,
+  // and the same conclusion: describe it, do not send it.
   return {
     artwork: outcome.artwork,
     audit: outcome.audit,
-    artistNotified: notification.sent,
-    notificationError: notification.error,
+    notifications: [artistNotice(outcome.artwork, reason)],
   };
 }
 
 /**
- * Tell the artist their work has been removed, and why.
+ * Describe the artist's notice. Sends nothing, reads nothing.
  *
- * Never throws. The artist's address lives in `artist_contact_details`, which
- * has all grants revoked from anon and authenticated and is reachable only
- * through the privileged server connection -- which is the connection this runs
- * on. It is read here and passed straight to the mailer; it is not returned to
- * any caller, and it does not appear in the audit entry.
+ * The artist's address is deliberately absent. It lives in
+ * `artist_contact_details`, which has all grants revoked from anon and
+ * authenticated; this used to read it here and hand it straight to a mailer,
+ * which worked but put a private column in a module that has no other reason to
+ * touch one. `recipientId` is the artist's account id, and the composition
+ * root's address book -- which runs on the same privileged connection, and is
+ * the one place that resolution is written down -- turns it into an address.
+ * The address is not returned to any caller and does not appear in the audit
+ * entry, exactly as before.
  */
-async function notifyArtist(
-  deps: ModerationDeps,
-  artwork: Artwork,
-  reason: string,
-): Promise<{ sent: boolean; error: string | null }> {
-  try {
-    if (!deps.mailer) return { sent: false, error: "No mailer is wired in" };
-
-    const to = await artistEmail(deps.db, artwork.artistId);
-    if (to === null) {
-      return { sent: false, error: "The artist has no contact address on file" };
-    }
-
-    await deps.mailer.send({
-      to,
-      subject: "Your PACHKA listing has been removed",
-      body: [
-        `Your listing${artwork.title ? ` "${artwork.title}"` : ""} has been removed from PACHKA.`,
-        ``,
-        `Reason: ${humanReason(reason)}`,
-        ``,
-        `A removed listing cannot be republished. If you believe this was a`,
-        `mistake, reply to this message and the team will look at it again.`,
-      ].join("\n"),
-    });
-
-    return { sent: true, error: null };
-  } catch (cause) {
-    return {
-      sent: false,
-      error: cause instanceof Error ? cause.message.slice(0, 500) : "Unknown mail failure",
-    };
-  }
-}
-
-async function artistEmail(sql: Sql, artistId: string): Promise<string | null> {
-  const row = await sql.maybeOne<{ email: string | null }>(
-    "select email from artist_contact_details where user_id = $1",
-    [artistId],
-  );
-  const email = row?.email?.trim() ?? "";
-  return email.length > 0 ? email : null;
+function artistNotice(artwork: Artwork, reason: string): NotificationRequest<"artist"> {
+  return {
+    audience: "artist",
+    template: MODERATION_TEMPLATES.artworkTakenDown,
+    recipientId: artwork.artistId,
+    data: {
+      artworkId: artwork.id,
+      artworkTitle: artwork.title ?? "",
+      reason,
+      // The reporter's own label rather than the enum, resolved here where the
+      // set is defined: the artist reads "Undeclared AI generation", never
+      // `undeclared_ai`.
+      reasonLabel: humanReason(reason),
+    },
+  };
 }
 
 /**

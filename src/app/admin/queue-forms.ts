@@ -36,6 +36,7 @@ import {
   type QueueSubjectType,
 } from "@/modules/moderation";
 import { text, toFormState, type FormState } from "../_lib/form-state";
+import type { NotificationDispatcher } from "../_lib/deps";
 
 function subjectType(value: string): QueueSubjectType {
   if (value === "artwork" || value === "artist") return value;
@@ -96,11 +97,19 @@ export async function resolveFromForm(
 /**
  * Remove an artwork from every public surface. One-way, by design: `removed` is
  * terminal for every role, admins included (ARCHITECTURE.md).
+ *
+ * `dispatch` is a parameter rather than an import because this is the one form
+ * whose message depends on what happened to an email. `moderation` no longer
+ * sends — it returns the artist's notice as a descriptor — so the delivery
+ * happens here, AFTER the takedown has committed, and its outcome is reported
+ * rather than assumed. An admin told "the artist was notified" about a message
+ * that never left is an admin who does not follow up.
  */
 export async function takeDownFromForm(
   deps: ModerationDeps,
   actorId: string | null,
   form: FormData,
+  dispatch: NotificationDispatcher,
 ): Promise<FormState> {
   try {
     await requireAdmin(deps.db, actorId);
@@ -112,12 +121,13 @@ export async function takeDownFromForm(
       note: text(form, "note") || undefined,
     });
 
-    // The notification outcome is reported rather than hidden: with no mailer
-    // wired, the artist has not actually been told, and an admin who assumes
-    // otherwise will not follow up.
+    // Never throws and never rejects — see `deliverQuietly`. A dead mail
+    // provider must not turn a committed takedown into an error banner.
+    const outcomes = await dispatch(result.notifications);
+
     return {
       status: "ok",
-      message: result.artistNotified
+      message: outcomes.every((outcome) => outcome.sent)
         ? "היצירה הוסרה והאמן קיבל הודעה."
         : "היצירה הוסרה. הודעת הדוא״ל לא נשלחה — יש ליידע את האמן ידנית.",
     };

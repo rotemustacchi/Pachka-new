@@ -29,6 +29,7 @@
  * fetched through `artistFulfilment()` — which checks state and ownership —
  * rather than pasted into a template that has checked nothing.
  */
+import type { NotificationRequest as MailNotificationRequest } from "@/shared/mail";
 import type { Fulfilment, Order } from "./types";
 
 export type NotificationAudience = "buyer" | "artist" | "admin";
@@ -36,18 +37,17 @@ export type NotificationAudience = "buyer" | "artist" | "admin";
 /**
  * Something that needs telling, handed back rather than sent.
  *
- * Structurally identical to `shipping.NotificationRequest` on purpose: the
- * composition root dispatches both through one mail layer, and two shapes would
- * mean two dispatchers.
+ * THE shared descriptor, narrowed to the audiences this module addresses. It
+ * used to be a fourth structurally identical declaration, with a header saying
+ * so; four copies of a type is a type that wants to live in one place, and
+ * `@/shared/mail/contract` is that place. The narrowing is the only thing this
+ * module adds: `orders` never writes to the notify-me subscriber list, and now
+ * it cannot.
+ *
+ * `import type`, so nothing about the mail transport reaches this module's
+ * runtime — the import is erased, and no test here needs a mailer or a fake.
  */
-export interface NotificationRequest {
-  readonly audience: NotificationAudience;
-  /** Stable template identifier. Callers switch on this, never on prose. */
-  readonly template: string;
-  /** The account to notify. Absent for `admin`, which is an operator queue. */
-  readonly recipientId?: string;
-  readonly data: Readonly<Record<string, unknown>>;
-}
+export type NotificationRequest = MailNotificationRequest<NotificationAudience>;
 
 /**
  * Every template this module emits. Exported as a constant so the mail layer

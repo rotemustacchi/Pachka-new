@@ -52,8 +52,11 @@ module writes another module's tables.
   not clear, which the queue lists alongside reports. `noFlaggedUploads`
   returns nothing until `uploads` ships, which is honest: there is no pipeline,
   so nothing has been flagged.
-- **`Mailer`** — the operator notification and the artist's takedown notice.
-  The one genuinely external boundary here, and the only thing the tests fake.
+- ~~**`Mailer`**~~ — gone. The operator's alert and the artist's takedown notice
+  are returned as `NotificationRequest` descriptors, like every other module's
+  notifications, and the composition root resolves the address, composes the
+  words and delivers. Nothing in this module sends mail, so nothing in its tests
+  fakes one.
 - **`InventoryDemandSource`** (`orders`, via `artworks`) — not consumed by
   moderation directly, but `takeDownArtwork` passes `deps.artworks` straight
   through to `artworks.removeArtwork`, so the composition root must supply the

@@ -1,21 +1,20 @@
 /**
- * PACHKA's mail transport.
+ * PACHKA's mail transport, and the one contract every module speaks to it.
  *
- * ONE INTERFACE, TWO ADAPTERS, FOUR DISAGREEING CALLERS
- * -----------------------------------------------------
- * `MailTransport` is the whole surface. `createResendMailer` is the production
- * adapter and reaches the network with `fetch`; `createLoggingMailer` is what a
- * deployment with no `RESEND_API_KEY` gets, and it records rather than sends.
- * `createMailer()` picks between them from the environment and never throws.
+ * ONE INTERFACE, TWO ADAPTERS, SIX AGREEING CALLERS
+ * ------------------------------------------------
+ * `MailTransport` is the whole delivery surface. `createResendMailer` is the
+ * production adapter and reaches the network with `fetch`; `createLoggingMailer`
+ * is what a deployment with no `RESEND_API_KEY` gets, and it records rather than
+ * sends. `createMailer()` picks between them from the environment and never
+ * throws.
  *
- * The four modules that need mail do not ask for it the same way, and this
- * directory adapts to them rather than the other way round:
- *
- *   `matchmaker` and `moderation` declare a `Mailer` port taking a composed
- *     `{ to, subject, body }`. A `MailTransport` satisfies both as-is.
- *   `orders`, `payouts` (and `shipping`, `certificates`) return
- *     `NotificationRequest` descriptors instead. `dispatchNotifications`
- *     resolves the address, composes the Hebrew, and sends.
+ * The six modules that produce notifications used to disagree about who writes
+ * the words. They no longer do. Every one of `orders`, `payouts`, `shipping`,
+ * `certificates`, `matchmaker` and `moderation` returns `NotificationRequest`
+ * descriptors and sends nothing; `dispatchNotifications` resolves the address,
+ * composes the words, and delivers. `contract.ts` is that descriptor and imports
+ * nothing, so depending on it costs a module no transport.
  *
  * `deliverQuietly` is the rule that matters most: delivery never breaks the
  * operation that triggered it.
@@ -32,13 +31,17 @@ export {
   type CreateMailerOptions,
   type MailEnvironment,
 } from "./transport";
+export type {
+  AddressBook,
+  AddressLookup,
+  NotificationAudience,
+  NotificationRequest,
+} from "./contract";
 export {
   composeNotification,
   dispatchNotifications,
-  type AddressBook,
   type NotificationContext,
   type NotificationOutcome,
-  type NotificationRequest,
 } from "./notifications";
 export type {
   DeliveryOutcome,

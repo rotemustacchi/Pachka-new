@@ -431,6 +431,131 @@ describe("composing a notification descriptor", () => {
     expect(body).toContain(`${SITE}/certificates/PCH-2026-000123`);
   });
 
+  it("confirms a notify-me subscription with the copy `matchmaker` used to send", () => {
+    // The words moved out of `matchmaker/notify.ts` and into the template table
+    // when the module stopped sending. They did not change on the way, and the
+    // module never sees them, so this is where they are checked.
+    const token = "a".repeat(64);
+    const { subject, body } = composeNotification(
+      {
+        audience: "subscriber",
+        template: "matchmaker.notify_confirmation",
+        recipientId: "sub-1",
+        data: { confirmationToken: token },
+      },
+      SITE,
+    );
+
+    expect(subject).toBe("אישור הרשמה לעדכונים מפצ׳קה");
+    expect(body).toContain("קיבלנו בקשה לעדכן אתכם כשיגיעו עבודות שמתאימות לתשובות שלכם.");
+    expect(body).toContain(`לאישור: ${SITE}/match/notify/confirm/${token}`);
+    expect(body).toContain("אם זה לא אתם, אפשר להתעלם מההודעה ולא יישלח אליכם דבר נוסף.");
+  });
+
+  it("prints the confirmation token only inside the link it authorises", () => {
+    // The token is a credential. It travels in `data` because the URL is the
+    // root's to build, and a labelled `confirmationToken: <hex>` line would put
+    // it in the message a second time, outside the link.
+    const token = "b".repeat(64);
+    const { body } = composeNotification(
+      {
+        audience: "subscriber",
+        template: "matchmaker.notify_confirmation",
+        recipientId: "sub-1",
+        data: { confirmationToken: token },
+      },
+      SITE,
+    );
+
+    expect(body).not.toContain(`confirmationToken: ${token}`);
+    expect(body.split(token)).toHaveLength(2);
+  });
+
+  it("alerts the operator with the copy `moderation` used to send, and names the subject", () => {
+    const { subject, body } = composeNotification(
+      {
+        audience: "admin",
+        template: "moderation.report_filed",
+        data: {
+          reportId: "rep-1",
+          subjectType: "artwork",
+          subjectId: "art-9",
+          reason: "undeclared_ai",
+          reasonLabel: "Undeclared AI generation",
+          details: "The brushwork is generated.",
+        },
+      },
+      SITE,
+    );
+
+    expect(subject).toBe("New PACHKA report: artwork art-9");
+    expect(body).toContain("A new report has been filed against artwork art-9.");
+    expect(body).toContain("Reason: Undeclared AI generation");
+    expect(body).toContain("Details: The brushwork is generated.");
+    expect(body).toContain(`Queue item: ${SITE}/admin/queue/artwork/art-9`);
+    // The reporter picked from a labelled set; the operator reads the label.
+    expect(body).not.toContain("undeclared_ai");
+  });
+
+  it("omits the details line from an operator alert that has none", () => {
+    const { body } = composeNotification(
+      {
+        audience: "admin",
+        template: "moderation.report_filed",
+        data: {
+          reportId: "rep-2",
+          subjectType: "artist",
+          subjectId: "usr-3",
+          reason: "other",
+          reasonLabel: "Something else",
+        },
+      },
+      SITE,
+    );
+
+    expect(body).not.toContain("Details:");
+    expect(body).toContain(`Queue item: ${SITE}/admin/queue/artist/usr-3`);
+  });
+
+  it("tells an artist their listing came down, titled or not, with no link at all", () => {
+    const titled = composeNotification(
+      {
+        audience: "artist",
+        template: "moderation.artwork_taken_down",
+        recipientId: "artist-1",
+        data: {
+          artworkId: "art-4",
+          artworkTitle: "Quiet Harbour",
+          reason: "undeclared_ai",
+          reasonLabel: "Undeclared AI generation",
+        },
+      },
+      SITE,
+    );
+
+    expect(titled.subject).toBe("Your PACHKA listing has been removed");
+    expect(titled.body).toContain('Your listing "Quiet Harbour" has been removed from PACHKA.');
+    expect(titled.body).toContain("Reason: Undeclared AI generation");
+    expect(titled.body).toContain("A removed listing cannot be republished.");
+    expect(titled.body).not.toContain("undeclared_ai");
+    // Nothing to link to: a removed listing has no page, and the artist is
+    // asked to reply rather than to follow a URL.
+    expect(titled.body).not.toContain(SITE);
+
+    const untitled = composeNotification(
+      {
+        audience: "artist",
+        template: "moderation.artwork_taken_down",
+        recipientId: "artist-1",
+        data: { artworkId: "art-5", artworkTitle: "", reason: "free text", reasonLabel: "free text" },
+      },
+      SITE,
+    );
+
+    expect(untitled.body).toContain("Your listing has been removed from PACHKA.");
+    expect(untitled.body).toContain("Reason: free text");
+  });
+
   it("still says something when a template has no wording yet, and names itself", () => {
     const { subject, body } = composeNotification(
       { audience: "buyer", template: "returns.never_arrived", data: { orderId: "ord-3" } },
@@ -446,8 +571,8 @@ describe("composing a notification descriptor", () => {
 describe("dispatching descriptors", () => {
   const addresses: AddressBook = {
     async addressFor(audience, recipientId) {
-      if (audience === "admin") return "operator@pachka.test";
-      return recipientId === "known" ? "known@example.com" : null;
+      if (audience === "admin") return { address: "operator@pachka.test" };
+      return recipientId === "known" ? { address: "known@example.com" } : { address: null };
     },
   };
 

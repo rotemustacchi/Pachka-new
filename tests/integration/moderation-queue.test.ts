@@ -37,19 +37,10 @@ import {
   resolveQueueItem,
   verifyAuditChain,
   type FlaggedUploadSource,
-  type Mailer,
   type ModerationDeps,
-  type OutboundMessage,
 } from "@/modules/moderation";
 import { setConfig } from "@/shared/config";
 import type { Database, Sql } from "@/shared/db";
-
-class FakeMailer implements Mailer {
-  readonly sent: OutboundMessage[] = [];
-  async send(message: OutboundMessage): Promise<void> {
-    this.sent.push(message);
-  }
-}
 
 async function seedAccount(
   database: TestDatabase,
@@ -100,7 +91,7 @@ async function seedPublishedArtwork(database: TestDatabase, artistId: string, ti
 }
 
 function depsFor(db: Database, extra: Partial<ModerationDeps> = {}): ModerationDeps {
-  return { db, auth: new FakeAuthGateway(), mailer: new FakeMailer(), ...extra };
+  return { db, auth: new FakeAuthGateway(), ...extra };
 }
 
 /** A real stand-in for `upload_events`, until the uploads module ships. */

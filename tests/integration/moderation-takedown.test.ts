@@ -15,6 +15,16 @@
  * exactly this purpose -- back it with a real table in this test's own
  * throwaway database, and assert against real rows.
  *
+ * THE ARTIST'S NOTICE IS DESCRIBED HERE, NOT SENT
+ * ----------------------------------------------
+ * There used to be a `FakeMailer` in this file. `takeDownArtwork` returns the
+ * artist's notice as a `NotificationRequest` and sends nothing, so what is
+ * asserted below is the descriptor -- who it is for, and that it carries the
+ * reporter's label rather than the enum. That the takedown STANDS when the
+ * artist cannot be told is now structural rather than defended: there is no
+ * send on this path to fail. What happens to the message afterwards, including
+ * an artist with no address on file, is `tests/integration/mail-delivery.test.ts`.
+ *
  * That makes the assertion meaningful rather than decorative. "Takedown does
  * not affect orders" is proved by showing the reservation rows are byte-for-byte
  * unchanged afterwards, that the derived availability still counts the order,
@@ -42,20 +52,9 @@ import {
   readAuditTrail,
   takeDownArtwork,
   verifyAuditChain,
-  type Mailer,
   type ModerationDeps,
-  type OutboundMessage,
 } from "@/modules/moderation";
 import type { Database, Sql } from "@/shared/db";
-
-class FakeMailer implements Mailer {
-  readonly sent: OutboundMessage[] = [];
-  failWith: string | null = null;
-  async send(message: OutboundMessage): Promise<void> {
-    if (this.failWith !== null) throw new Error(this.failWith);
-    this.sent.push(message);
-  }
-}
 
 async function seedAccount(
   database: TestDatabase,
@@ -117,8 +116,8 @@ async function seedPublishedArtwork(database: TestDatabase, artistId: string, ti
   return rows[0]!.id;
 }
 
-function depsFor(db: Database, mailer = new FakeMailer()): { deps: ModerationDeps; mailer: FakeMailer } {
-  return { deps: { db, auth: new FakeAuthGateway(), mailer }, mailer };
+function depsFor(db: Database): { deps: ModerationDeps } {
+  return { deps: { db, auth: new FakeAuthGateway() } };
 }
 
 // ---------------------------------------------------------------------------
@@ -232,7 +231,7 @@ describe("an admin removing an artwork", () => {
     const adminId = await seedAccount(database, ["admin"], "Admin B.");
     const artistId = await seedArtist(database, "Dana P.", "dana@example.com");
     const artworkId = await seedPublishedArtwork(database, artistId, "Quiet Harbour");
-    const { deps, mailer } = depsFor(database.db);
+    const { deps } = depsFor(database.db);
 
     const result = await takeDownArtwork(deps, {
       actorId: adminId,
@@ -240,21 +239,52 @@ describe("an admin removing an artwork", () => {
       reason: "undeclared_ai",
     });
 
-    expect(result.artistNotified).toBe(true);
-    expect(mailer.sent).toHaveLength(1);
-    expect(mailer.sent[0]!.to).toBe("dana@example.com");
-    expect(mailer.sent[0]!.body).toContain("Quiet Harbour");
-    // The artist reads the words the reporter chose from, not the enum.
-    expect(mailer.sent[0]!.body).toContain("Undeclared AI generation");
-    expect(mailer.sent[0]!.body).not.toContain("undeclared_ai");
+    expect(result.notifications).toEqual([
+      {
+        audience: "artist",
+        template: "moderation.artwork_taken_down",
+        // The artist's ACCOUNT, not their address. `dana@example.com` is on
+        // file and this module still does not read it -- the private
+        // `artist_contact_details` row is the address book's to resolve.
+        recipientId: artistId,
+        data: {
+          artworkId,
+          artworkTitle: "Quiet Harbour",
+          reason: "undeclared_ai",
+          // The artist reads the words the reporter chose from, not the enum.
+          reasonLabel: "Undeclared AI generation",
+        },
+      },
+    ]);
+    expect(JSON.stringify(result.notifications)).not.toContain("dana@example.com");
+  });
+
+  it("carries free text through as the reason when it is not one of the set", async () => {
+    const adminId = await seedAccount(database, ["admin"], "Admin B2.");
+    const artistId = await seedArtist(database, "Noa R.", "noa@example.com");
+    const artworkId = await seedPublishedArtwork(database, artistId, "Harbour II");
+
+    const result = await takeDownArtwork(depsFor(database.db).deps, {
+      actorId: adminId,
+      artworkId,
+      reason: "Sold as an original on three other marketplaces",
+    });
+
+    expect(result.notifications[0]!.data).toMatchObject({
+      reason: "Sold as an original on three other marketplaces",
+      reasonLabel: "Sold as an original on three other marketplaces",
+    });
   });
 
   it("stands even when the artist cannot be emailed", async () => {
+    // Structural now: the takedown commits and this function returns before
+    // anything is sent, so there is no delivery failure that could reach it.
+    // The artist below has no contact row at all, which is the case that used
+    // to produce `artistNotified: false`.
     const adminId = await seedAccount(database, ["admin"], "Admin C.");
     const artistId = await seedArtist(database);
     const artworkId = await seedPublishedArtwork(database, artistId);
-    const { deps, mailer } = depsFor(database.db);
-    mailer.failWith = "smtp: connection refused";
+    const { deps } = depsFor(database.db);
 
     const result = await takeDownArtwork(deps, {
       actorId: adminId,
@@ -262,8 +292,10 @@ describe("an admin removing an artwork", () => {
       reason: "offensive_content",
     });
 
-    expect(result.artistNotified).toBe(false);
-    expect(result.notificationError).toContain("connection refused");
+    // The notice is still described. Whether it can be delivered is a question
+    // for the address book, and a takedown does not wait for the answer.
+    expect(result.notifications).toHaveLength(1);
+    expect(result.notifications[0]!.recipientId).toBe(artistId);
 
     // The takedown is the thing that had to survive.
     const row = await database.db.one<{ status: string }>(
@@ -391,7 +423,7 @@ describe("takedowns that must be refused", () => {
     const buyerId = await seedAccount(database, ["buyer"], "Buyer H.");
     const artistId = await seedArtist(database);
     const artworkId = await seedPublishedArtwork(database, artistId);
-    const { deps, mailer } = depsFor(database.db);
+    const { deps } = depsFor(database.db);
 
     await expect(
       takeDownArtwork(deps, { actorId: buyerId, artworkId, reason: "offensive_content" }),
@@ -403,9 +435,16 @@ describe("takedowns that must be refused", () => {
     );
     expect(row.status).toBe("published");
     expect(await readAuditTrail(database.db)).toEqual([]);
-    expect(mailer.sent).toEqual([]);
 
-    // Positive control: the identical call by an admin works.
+    // Positive control: the identical call by an admin works, and only then is
+    // there a notice at all -- a refused takedown describes nothing.
+    const allowed = await takeDownArtwork(deps, {
+      actorId: adminId,
+      artworkId,
+      reason: "offensive_content",
+    });
+    expect(allowed.artwork.status).toBe("removed");
+    expect(allowed.notifications).toHaveLength(1);
     await expect(
       takeDownArtwork(deps, { actorId: adminId, artworkId, reason: "offensive_content" }),
     ).resolves.toMatchObject({ artwork: { status: "removed" } });
@@ -464,7 +503,7 @@ describe("takedowns that must be refused", () => {
     const adminId = await seedAccount(database, ["admin"], "Admin M.");
     const artistId = await seedArtist(database);
     const artworkId = await seedPublishedArtwork(database, artistId);
-    const { deps, mailer } = depsFor(database.db);
+    const { deps } = depsFor(database.db);
 
     await expect(
       takeDownArtwork(deps, {
@@ -481,8 +520,6 @@ describe("takedowns that must be refused", () => {
     );
     expect(row.status).toBe("published");
     expect(await readAuditTrail(database.db)).toEqual([]);
-    // And the artist was never told about a takedown that did not happen.
-    expect(mailer.sent).toEqual([]);
   });
 });
 

@@ -3,18 +3,12 @@
  *
  * WHY THIS SHAPE AND NOT ANOTHER
  * ------------------------------
- * Four modules need mail and they do not agree on how to ask for it. Two of
- * them — `matchmaker` and `moderation` — declare their own `Mailer` port whose
- * `send` takes `{ to, subject, body }` and returns `Promise<void>`. The other
- * two — `orders` and `payouts`, joined by `shipping` and `certificates` — declare
- * no mailer at all: they return `NotificationRequest` descriptors and expect the
- * composition root to resolve an address, compose the words, and send.
- *
- * `MailMessage` is therefore deliberately a superset of the first pair's message
- * type with `html` optional, so a `MailTransport` is structurally assignable to
- * both `matchmaker.Mailer` and `moderation.Mailer` with no adapter object in
- * between. `notifications.ts` handles the second pair by turning a descriptor
- * into one of these. Nothing in this directory edits a module to make that work.
+ * This is the TRANSPORT contract: a composed message and something that will
+ * carry it. It is deliberately not the contract a domain module speaks — that
+ * one is `contract.ts`, which names an audience and a template and carries no
+ * words at all. Six modules produce notifications and none of them constructs a
+ * `MailMessage`; `notifications.ts` is the single place that turns a descriptor
+ * into one of these.
  *
  * SECURITY.md S2-21 item 5: platform mail uses a fixed `From`, and "no
  * user-supplied value ever populates any address header". `MailMessage` has no
@@ -37,8 +31,8 @@ export interface MailMessage {
 /**
  * Somewhere to hand a message.
  *
- * Structurally identical to `matchmaker.Mailer` and `moderation.Mailer` on
- * purpose: a value of this type satisfies both without a wrapper.
+ * The only mail port in PACHKA. No module declares a second one, and no module
+ * is handed this: `dispatchNotifications` is, at the composition root.
  *
  * `send` REJECTS on a delivery failure rather than returning a status. That is
  * the contract both module ports already state, and it is the right one — a
@@ -76,7 +70,7 @@ export interface MailTransport extends Mailer {
   state(): MailTransportState;
 }
 
-/** What `deliverQuietly` reports. Mirrors `moderation`'s own notification result. */
+/** What `deliverQuietly` reports, and what a stored notification outcome records. */
 export interface DeliveryOutcome {
   readonly sent: boolean;
   /** A short, address-free description of the failure. Null on success. */
