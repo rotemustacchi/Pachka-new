@@ -66,6 +66,28 @@ export async function requestIp(): Promise<string | undefined> {
  * `getUser()` rather than `getSession()`: the former revalidates the token with
  * the auth server, the latter trusts whatever is in the cookie.
  */
+/**
+ * The signed-in user, or null.
+ *
+ * `requireUserId` throws, which is right for an action but wrong for a page:
+ * a page needs to decide what to RENDER for a visitor who is not signed in,
+ * and it cannot do that from an exception. Without this, /become-an-artist
+ * showed its whole form to anonymous visitors and only refused them after they
+ * had filled it in.
+ */
+export async function currentUserId(): Promise<string | null> {
+  const store = await cookies();
+  const client = createSupabaseServerClient({
+    getAll: () => store.getAll(),
+    setAll: (toSet) => {
+      for (const { name, value, options } of toSet) store.set(name, value, options);
+    },
+  });
+
+  const { data, error } = await client.auth.getUser();
+  return error || !data.user ? null : data.user.id;
+}
+
 export async function requireUserId(): Promise<string> {
   const store = await cookies();
   const client = createSupabaseServerClient({

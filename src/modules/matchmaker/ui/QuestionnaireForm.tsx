@@ -55,10 +55,18 @@ function CheckboxGroup({
   name,
   legend,
   options,
+  errors,
 }: {
   readonly name: string;
   readonly legend: string;
   readonly options: readonly (readonly [string, string])[];
+  /**
+   * `parseAnswers` returns field errors for these axes too, not only for the
+   * budget and the dimensions. Without somewhere to put them they surfaced
+   * only in the top-level banner — and in English, since the module's messages
+   * for a value outside a closed set are written for a developer.
+   */
+  readonly errors?: readonly string[] | undefined;
 }) {
   return (
     <fieldset className="border-0 p-0">
@@ -74,6 +82,7 @@ function CheckboxGroup({
           </label>
         ))}
       </div>
+      <FieldError messages={errors} />
     </fieldset>
   );
 }
@@ -82,10 +91,18 @@ function RadioGroup({
   name,
   legend,
   options,
+  errors,
 }: {
   readonly name: string;
   readonly legend: string;
   readonly options: readonly (readonly [string, string])[];
+  /**
+   * `parseAnswers` returns field errors for these axes too, not only for the
+   * budget and the dimensions. Without somewhere to put them they surfaced
+   * only in the top-level banner — and in English, since the module's messages
+   * for a value outside a closed set are written for a developer.
+   */
+  readonly errors?: readonly string[] | undefined;
 }) {
   return (
     <fieldset className="border-0 p-0">
@@ -101,6 +118,7 @@ function RadioGroup({
           </label>
         ))}
       </div>
+      <FieldError messages={errors} />
     </fieldset>
   );
 }
@@ -113,15 +131,36 @@ const entries = <K extends string>(
 export function QuestionnaireForm({ action, fieldErrors }: QuestionnaireFormProps) {
   return (
     <form action={action} method="post" className="flex flex-col gap-10">
-      <RadioGroup name="medium" legend={QUESTION_LABELS.medium} options={entries(MEDIA, MEDIUM_LABELS)} />
-      <CheckboxGroup name="styles" legend={QUESTION_LABELS.styles} options={entries(STYLES, STYLE_LABELS)} />
-      <RadioGroup name="palette" legend={QUESTION_LABELS.palette} options={entries(PALETTES, PALETTE_LABELS)} />
+      <RadioGroup
+        name="medium"
+        legend={QUESTION_LABELS.medium}
+        options={entries(MEDIA, MEDIUM_LABELS)}
+        errors={fieldErrors?.medium}
+      />
+      <CheckboxGroup
+        name="styles"
+        legend={QUESTION_LABELS.styles}
+        options={entries(STYLES, STYLE_LABELS)}
+        errors={fieldErrors?.styles}
+      />
+      <RadioGroup
+        name="palette"
+        legend={QUESTION_LABELS.palette}
+        options={entries(PALETTES, PALETTE_LABELS)}
+        errors={fieldErrors?.palette}
+      />
       <CheckboxGroup
         name="targetSpaces"
+        errors={fieldErrors?.targetSpaces}
         legend={QUESTION_LABELS.targetSpace}
         options={entries(TARGET_SPACES, TARGET_SPACE_LABELS)}
       />
-      <CheckboxGroup name="moods" legend={QUESTION_LABELS.mood} options={entries(MOODS, MOOD_LABELS)} />
+      <CheckboxGroup
+        name="moods"
+        legend={QUESTION_LABELS.mood}
+        options={entries(MOODS, MOOD_LABELS)}
+        errors={fieldErrors?.moods}
+      />
 
       <fieldset className="border-0 p-0">
         <legend className="mb-3 text-[17px] font-black text-ink">
