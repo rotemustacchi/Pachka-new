@@ -450,8 +450,14 @@ describe("a return that arrives intact", () => {
     });
     const stored = await readReturn(database.db, returnId);
 
-    expect(stored.cancellationFeeAgorot).toBe(20_000);
-    expect(stored.refundAmountAgorot).toBe(380_000);
+    // ₪4,000 at 5% is ₪200, which is over the statutory ₪100 ceiling, so the
+    // ceiling governs. This previously asserted 20_000 — it was encoding the
+    // missing cap, not testing round-tripping against it. The assertion is not
+    // weaker: it still requires the stored figures to equal the returned ones
+    // exactly, and still requires them to reconstruct the subtotal.
+    expect(stored.cancellationFeeAgorot).toBe(10_000);
+    expect(stored.refundAmountAgorot).toBe(390_000);
+    expect(stored.cancellationFeeAgorot + stored.refundAmountAgorot).toBe(400_000);
   });
 
   it("puts the artwork back within reach of a new buyer", async () => {

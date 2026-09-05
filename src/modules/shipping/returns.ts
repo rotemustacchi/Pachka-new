@@ -33,7 +33,7 @@ import type { Sql } from "@/shared/db";
 import {
   addAgorot,
   subtractAgorot,
-  toAgorot,
+  agorot,
   fromDbValue,
   splitCommission,
   toDbValue,
@@ -320,7 +320,7 @@ interface RefundFigures {
  * and unlawful on a large one. At the 5% maximum the two rules cross at
  * ₪2,000: above that, the percentage exceeds the cap and the cap governs.
  */
-const STATUTORY_FEE_CEILING_AGOROT = toAgorot(10_000);
+const STATUTORY_FEE_CEILING_AGOROT = agorot(10_000);
 
 async function refundFor(db: Sql, row: ReturnRow): Promise<RefundFigures> {
   const rate = await getConfig(db, "returns.cancellation_fee_rate");
