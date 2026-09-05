@@ -457,7 +457,12 @@ describe("a return that arrives intact", () => {
     // exactly, and still requires them to reconstruct the subtotal.
     expect(stored.cancellationFeeAgorot).toBe(10_000);
     expect(stored.refundAmountAgorot).toBe(390_000);
-    expect(stored.cancellationFeeAgorot + stored.refundAmountAgorot).toBe(400_000);
+    // Both columns are nullable until a receipt is recorded, so assert they are
+    // set before adding them — a null would otherwise coerce to 0 and let a
+    // missing figure satisfy the reconstruction.
+    expect(stored.cancellationFeeAgorot).not.toBeNull();
+    expect(stored.refundAmountAgorot).not.toBeNull();
+    expect((stored.cancellationFeeAgorot ?? 0) + (stored.refundAmountAgorot ?? 0)).toBe(400_000);
   });
 
   it("puts the artwork back within reach of a new buyer", async () => {
