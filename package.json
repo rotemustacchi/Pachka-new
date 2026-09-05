@@ -19,7 +19,7 @@
     "db:migrate": "tsx scripts/migrate.ts up",
     "db:status": "tsx scripts/migrate.ts status",
     "db:new": "tsx scripts/migrate.ts new",
-    "verify": "npm run typecheck && npm run lint && npm run test"
+    "verify": "npm run typecheck && npm run lint && npm run build && npm run test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
