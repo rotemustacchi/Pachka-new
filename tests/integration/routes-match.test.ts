@@ -17,7 +17,6 @@
  * so what these tests execute is what a visitor receives. `createElement`
  * rather than JSX only because the integration project compiles `.ts`.
  */
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
