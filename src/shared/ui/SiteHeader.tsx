@@ -8,12 +8,12 @@ import { LogoMark, Wordmark } from "@/assets";
  * possible defect.
  *
  * `/catalog` is served by the catalog module's route wiring; `/artists` lists
- * artists. Both are pending, so they are commented out rather than shipped as
- * dead links — a nav that offers nothing is better than one that offers a 404.
+ * every artist with published work. Both now exist, so both are back in the nav
+ * — in the order design/Main.dc.html and design/Catalog.dc.html draw them.
  */
 const NAV_LINKS = [
-  // { href: "/catalog", label: "קטלוג" },   // pending catalog route wiring
-  // { href: "/artists", label: "אמנים" },   // pending the artist index route
+  { href: "/catalog", label: "קטלוג" },
+  { href: "/artists", label: "אמנים" },
   { href: "/become-an-artist", label: "הצטרפות כאמן" },
 ] as const;
 
