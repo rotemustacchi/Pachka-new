@@ -29,6 +29,7 @@ function scored(score: number, id?: string): ArtworkScore {
     components: { embedding: null, taxonomy: null, budget: 1, size: null, freshness: 1 },
     overBudgetByAgorot: 0,
     excludedForBudget: false,
+    excludedForTaxonomy: false,
   };
 }
 

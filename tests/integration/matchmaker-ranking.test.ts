@@ -185,11 +185,25 @@ function search(
   db: Database,
   answers: Record<string, unknown>,
   now = new Date("2026-09-01T12:00:00.000Z"),
+  /**
+   * Which visitor is asking. Defaults to one device, which is what most tests
+   * here want. Rotation is the exception: it is about what DIFFERENT buyers see
+   * across epochs, and running its whole sweep from a single fingerprint trips
+   * the matchmaker's own rate limiter — correctly, since that is precisely the
+   * scripted-query pattern the limiter exists to refuse. Passing a distinct
+   * visitor models the real case rather than raising the limit to get past it.
+   */
+  visitor = FINGERPRINT,
 ): Promise<MatchOutcome> {
   return runMatchmaker(
     { db },
-    { answers, clientFingerprint: FINGERPRINT, viewerFingerprint: VIEWER, now },
+    { answers, clientFingerprint: visitor, viewerFingerprint: VIEWER, now },
   );
+}
+
+/** A distinct 64-character fingerprint per simulated visitor. */
+function visitorFingerprint(n: number): string {
+  return String(n).padStart(64, "0");
 }
 
 // A wall width is now required, and it is what makes this a ranking test at
@@ -257,11 +271,18 @@ describe("reproducibility within a rotation epoch", () => {
     const orderings = new Set<string>();
     for (let day = 0; day < 21; day += 1) {
       const at = new Date(Date.UTC(2026, 8, 1 + day, 12));
-      const outcome = await search(database.db, CALM_BUYER, at);
+      const outcome = await search(database.db, CALM_BUYER, at, visitorFingerprint(day * 2));
       orderings.add(outcome.matches.map((m) => m.artworkId).join(","));
 
-      // Same epoch, later in the day: unchanged.
-      const later = await search(database.db, CALM_BUYER, new Date(at.getTime() + 6 * 3600_000));
+      // Same epoch, later in the day, a different visitor: still unchanged.
+      // Ordering must depend on the epoch and nothing else — not on who asked,
+      // and not on how many times anyone has asked before.
+      const later = await search(
+        database.db,
+        CALM_BUYER,
+        new Date(at.getTime() + 6 * 3600_000),
+        visitorFingerprint(day * 2 + 1),
+      );
       expect(later.matches.map((m) => m.artworkId)).toEqual(
         outcome.matches.map((m) => m.artworkId),
       );

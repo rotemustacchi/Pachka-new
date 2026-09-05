@@ -263,8 +263,16 @@ describe("scoreArtwork", () => {
   });
 
   it("rejects an answer outside the closed set before it can be scored", () => {
-    expect(() => parseAnswers({ budgetMax: 1000, styles: ["coastal-minimal"] })).toThrow(
-      /not a permitted styles answer/,
-    );
+    // Dimensions supplied so the taxonomy check is what fails. Without them the
+    // required-dimensions error fires first and this test passes for the wrong
+    // reason, proving only that parseAnswers throws something.
+    expect(() =>
+      parseAnswers({
+        budgetMax: 1000,
+        wallHeight: 200,
+        wallWidth: 150,
+        styles: ["coastal-minimal"],
+      }),
+    ).toThrow(/not a permitted styles answer/);
   });
 });

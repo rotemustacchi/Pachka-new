@@ -115,6 +115,19 @@ export interface ArtworkScore {
    * budget").
    */
   readonly excludedForBudget: boolean;
+  /**
+   * True when the buyer named taxonomy preferences and this artwork matches
+   * none of them. Such a piece must not be shown whatever it scores elsewhere:
+   * a buyer who asked for minimalist and calm has not been curated for if they
+   * are handed pop art because it happens to fit the wall and the budget.
+   *
+   * Kept distinct from a low taxonomy score. Matching one axis weakly is a
+   * worse match; matching nothing the buyer asked for is a different kind of
+   * answer, and the blend cannot express that because the other components
+   * carry it — the pop-art piece this was written for scored 0.48 on budget,
+   * size and freshness alone, comfortably above the minimum.
+   */
+  readonly excludedForTaxonomy: boolean;
 }
 
 const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -336,5 +349,6 @@ export function scoreArtwork(
     components,
     overBudgetByAgorot: budget.overByAgorot,
     excludedForBudget: budget.excluded,
+    excludedForTaxonomy: components.taxonomy === 0,
   };
 }

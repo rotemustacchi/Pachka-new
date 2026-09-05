@@ -57,7 +57,10 @@ export function rank(
   epoch: RotationEpoch,
 ): readonly ArtworkScore[] {
   const eligible = scored.filter(
-    (candidate) => !candidate.excludedForBudget && candidate.score >= settings.minimumScore,
+    (candidate) =>
+      !candidate.excludedForBudget &&
+      !candidate.excludedForTaxonomy &&
+      candidate.score >= settings.minimumScore,
   );
 
   const keyed = new Map(eligible.map((c) => [c.artworkId, rotationKey(epoch, c.artworkId)] as const));
