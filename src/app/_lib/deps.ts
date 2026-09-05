@@ -27,7 +27,16 @@
  * artwork, and it is the reason this file is a single function rather than a
  * convention each route follows on its own.
  */
-import { getDatabase, type Database } from "@/shared/db";
+import { getDatabase, createSupabaseServiceRoleClient, type Database } from "@/shared/db";
+import { getConfig, publicEnv } from "@/shared/config";
+import {
+  appMailer,
+  dispatchNotifications,
+  type AddressBook,
+  type NotificationContext,
+  type NotificationOutcome,
+  type NotificationRequest,
+} from "@/shared/mail";
 import type { ArtworksDeps } from "@/modules/artworks";
 import type { CatalogDeps } from "@/modules/catalog";
 import { impressionSource } from "@/modules/matchmaker";
@@ -83,4 +92,99 @@ export function ordersDeps(db: Database = getDatabase()): OrdersDeps {
  */
 export function certificatesDeps(db: Database = getDatabase()): CertificatesDeps {
   return { db, buyerNames: buyerNamesFromOrders(ordersDeps(db)) };
+}
+
+// ---------------------------------------------------------------------------
+// Mail
+// ---------------------------------------------------------------------------
+//
+// Until now nothing in this application sent anything. `checkout/actions.ts`
+// says so in its own header — "No mailer is wired anywhere in this application
+// yet" — and `admin/deps.ts` listed `mailer` under "what is deliberately
+// absent". The transport now exists in `src/shared/mail`, and this is where it
+// is handed out.
+//
+// The four modules that need mail do not agree on how to ask for it, and this
+// file does not try to make them agree. `matchmaker` and `moderation` take a
+// `Mailer` and send for themselves; `orders`, `payouts`, `shipping` and
+// `certificates` return notification descriptors and expect this root to
+// dispatch them. `appMailer()` serves the first pair directly. `addressBook()`
+// and `dispatchNotifications` serve the second.
+
+/**
+ * Where a notification's address comes from, by audience.
+ *
+ * Three sources, because PACHKA keeps three kinds of address in three places
+ * and each has its own rule:
+ *
+ *   artist — `artist_contact_details`, which has ALL GRANTS REVOKED from anon
+ *     and authenticated and is reachable only through this privileged
+ *     connection. `moderation/takedown.ts` reads it exactly this way.
+ *   buyer  — Supabase auth, which is the only place a buyer's address exists.
+ *     There is no `email` column on `profiles`, deliberately: the migration
+ *     notes that an anonymously-readable column whose name contains `email` is
+ *     a liability. So the service-role client is built lazily, per lookup.
+ *   admin  — `moderation.operator_email` from `app_config`. An operator queue
+ *     is not a person, which is why an `admin` descriptor carries no
+ *     `recipientId` for this function to use.
+ *
+ * A missing address returns null rather than raising. `dispatchNotifications`
+ * records that as an undelivered message, which is the honest outcome and not
+ * a reason to fail the order that produced it.
+ */
+export function addressBook(db: Database = getDatabase()): AddressBook {
+  return {
+    async addressFor(audience: string, recipientId?: string): Promise<string | null> {
+      if (audience === "admin") {
+        const configured = (await getConfig(db, "moderation.operator_email")).trim();
+        return configured.length > 0 ? configured : null;
+      }
+
+      if (recipientId === undefined || recipientId === "") return null;
+
+      if (audience === "artist") {
+        const row = await db.maybeOne<{ email: string | null }>(
+          "select email from artist_contact_details where user_id = $1",
+          [recipientId],
+        );
+        const email = row?.email?.trim() ?? "";
+        return email.length > 0 ? email : null;
+      }
+
+      if (audience === "buyer") {
+        const { data } = await createSupabaseServiceRoleClient().auth.admin.getUserById(recipientId);
+        const email = data.user?.email?.trim() ?? "";
+        return email.length > 0 ? email : null;
+      }
+
+      return null;
+    },
+  };
+}
+
+/**
+ * Everything `dispatchNotifications` needs besides the mailer.
+ *
+ * `siteUrl` is supplied here rather than by any module, because
+ * `certificates/notifications.ts` refuses to build a URL: "a template that
+ * received a finished URL would be a template that could be pointed somewhere
+ * else by whatever built it."
+ */
+export function notificationContext(db: Database = getDatabase()): NotificationContext {
+  return { addresses: addressBook(db), siteUrl: publicEnv().NEXT_PUBLIC_SITE_URL };
+}
+
+/**
+ * Dispatch a module's notifications. Call it AFTER the transaction commits.
+ *
+ * Never throws and never rejects — see `deliverQuietly`. The outcomes are
+ * returned so a caller that wants to report delivery, as the admin queue does,
+ * can; a caller that does not may ignore them, and an order is unaffected
+ * either way.
+ */
+export function dispatchAppNotifications(
+  requests: readonly NotificationRequest[],
+  db: Database = getDatabase(),
+): Promise<NotificationOutcome[]> {
+  return dispatchNotifications(appMailer(), notificationContext(db), requests);
 }
