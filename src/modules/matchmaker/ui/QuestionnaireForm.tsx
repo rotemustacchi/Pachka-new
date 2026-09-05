@@ -40,6 +40,32 @@ export interface QuestionnaireFormProps {
   readonly action: string;
   /** Field-level messages from a rejected submission, keyed as `parseAnswers` keys them. */
   readonly fieldErrors?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * What the buyer answered last time, keyed as the form names them.
+   *
+   * Revising used to mean re-answering from scratch, which is the worst place
+   * to lose someone: they revise precisely when the matches missed, and being
+   * handed a blank form is a reason to give up rather than adjust. Multi-value
+   * axes arrive as arrays because a checkbox group posts one name many times.
+   */
+  readonly initial?: Readonly<Record<string, string | readonly string[] | undefined>>;
+}
+
+/** Whether `value` was among the previous answers for `name`. */
+function wasChosen(
+  initial: QuestionnaireFormProps["initial"],
+  name: string,
+  value: string,
+): boolean {
+  const answered = initial?.[name];
+  if (answered === undefined) return false;
+  return Array.isArray(answered) ? answered.includes(value) : answered === value;
+}
+
+/** The previous single-valued answer for `name`, for a text or number input. */
+function previous(initial: QuestionnaireFormProps["initial"], name: string): string | undefined {
+  const answered = initial?.[name];
+  return Array.isArray(answered) ? answered[0] : (answered as string | undefined);
 }
 
 function FieldError({ messages }: { readonly messages: readonly string[] | undefined }) {
@@ -56,6 +82,7 @@ function CheckboxGroup({
   legend,
   options,
   errors,
+  initial,
 }: {
   readonly name: string;
   readonly legend: string;
@@ -67,6 +94,7 @@ function CheckboxGroup({
    * for a value outside a closed set are written for a developer.
    */
   readonly errors?: readonly string[] | undefined;
+  readonly initial?: QuestionnaireFormProps["initial"];
 }) {
   return (
     <fieldset className="border-0 p-0">
@@ -77,7 +105,13 @@ function CheckboxGroup({
             key={value}
             className="inline-flex cursor-pointer items-center gap-2 rounded-button border border-rule px-4 py-2 text-[14px] font-light text-ink-soft hover:border-ink"
           >
-            <input type="checkbox" name={name} value={value} className="accent-ink" />
+            <input
+              type="checkbox"
+              name={name}
+              value={value}
+              defaultChecked={wasChosen(initial, name, value)}
+              className="accent-ink"
+            />
             {label}
           </label>
         ))}
@@ -92,6 +126,7 @@ function RadioGroup({
   legend,
   options,
   errors,
+  initial,
 }: {
   readonly name: string;
   readonly legend: string;
@@ -103,6 +138,7 @@ function RadioGroup({
    * for a value outside a closed set are written for a developer.
    */
   readonly errors?: readonly string[] | undefined;
+  readonly initial?: QuestionnaireFormProps["initial"];
 }) {
   return (
     <fieldset className="border-0 p-0">
@@ -113,7 +149,13 @@ function RadioGroup({
             key={value}
             className="inline-flex cursor-pointer items-center gap-2 rounded-button border border-rule px-4 py-2 text-[14px] font-light text-ink-soft hover:border-ink"
           >
-            <input type="radio" name={name} value={value} className="accent-ink" />
+            <input
+              type="radio"
+              name={name}
+              value={value}
+              defaultChecked={wasChosen(initial, name, value)}
+              className="accent-ink"
+            />
             {label}
           </label>
         ))}
@@ -128,7 +170,7 @@ const entries = <K extends string>(
   labels: Readonly<Record<K, string>>,
 ): readonly (readonly [string, string])[] => values.map((value) => [value, labels[value]] as const);
 
-export function QuestionnaireForm({ action, fieldErrors }: QuestionnaireFormProps) {
+export function QuestionnaireForm({ action, fieldErrors, initial }: QuestionnaireFormProps) {
   return (
     <form action={action} method="post" className="flex flex-col gap-10">
       <RadioGroup
@@ -136,22 +178,26 @@ export function QuestionnaireForm({ action, fieldErrors }: QuestionnaireFormProp
         legend={QUESTION_LABELS.medium}
         options={entries(MEDIA, MEDIUM_LABELS)}
         errors={fieldErrors?.medium}
+        initial={initial}
       />
       <CheckboxGroup
         name="styles"
         legend={QUESTION_LABELS.styles}
         options={entries(STYLES, STYLE_LABELS)}
         errors={fieldErrors?.styles}
+        initial={initial}
       />
       <RadioGroup
         name="palette"
         legend={QUESTION_LABELS.palette}
         options={entries(PALETTES, PALETTE_LABELS)}
         errors={fieldErrors?.palette}
+        initial={initial}
       />
       <CheckboxGroup
         name="targetSpaces"
         errors={fieldErrors?.targetSpaces}
+        initial={initial}
         legend={QUESTION_LABELS.targetSpace}
         options={entries(TARGET_SPACES, TARGET_SPACE_LABELS)}
       />
@@ -160,6 +206,7 @@ export function QuestionnaireForm({ action, fieldErrors }: QuestionnaireFormProp
         legend={QUESTION_LABELS.mood}
         options={entries(MOODS, MOOD_LABELS)}
         errors={fieldErrors?.moods}
+        initial={initial}
       />
 
       <fieldset className="border-0 p-0">
@@ -175,6 +222,7 @@ export function QuestionnaireForm({ action, fieldErrors }: QuestionnaireFormProp
             <input
               type="number"
               name="budgetMin"
+              defaultValue={previous(initial, "budgetMin")}
               min={0}
               step={10}
               inputMode="numeric"
@@ -186,6 +234,7 @@ export function QuestionnaireForm({ action, fieldErrors }: QuestionnaireFormProp
             <input
               type="number"
               name="budgetMax"
+              defaultValue={previous(initial, "budgetMax")}
               min={1}
               step={10}
               required
@@ -207,6 +256,7 @@ export function QuestionnaireForm({ action, fieldErrors }: QuestionnaireFormProp
             <input
               type="number"
               name="wallHeight"
+              defaultValue={previous(initial, "wallHeight")}
               min={1}
               step={1}
               inputMode="numeric"
@@ -218,6 +268,7 @@ export function QuestionnaireForm({ action, fieldErrors }: QuestionnaireFormProp
             <input
               type="number"
               name="wallWidth"
+              defaultValue={previous(initial, "wallWidth")}
               min={1}
               step={1}
               inputMode="numeric"

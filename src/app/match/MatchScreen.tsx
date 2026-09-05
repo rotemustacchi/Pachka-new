@@ -89,11 +89,13 @@ function Shell({ children }: { readonly children: ReactNode }) {
  * person filling in a form can act on them.
  */
 function Questionnaire({
+  initial,
   fieldErrors,
   notice,
 }: {
   readonly fieldErrors?: FieldErrors;
   readonly notice?: string;
+  readonly initial?: Readonly<Record<string, string | readonly string[]>>;
 }) {
   return (
     <Shell>
@@ -114,7 +116,14 @@ function Questionnaire({
         </p>
       ) : null}
 
-      <QuestionnaireForm action={SEARCH_ACTION} fieldErrors={fieldErrors} />
+      <QuestionnaireForm
+        action={SEARCH_ACTION}
+        fieldErrors={fieldErrors}
+        // A rejected submission comes back through the query string, so the
+        // buyer sees what they typed beside the message about it rather than
+        // an empty form and a complaint.
+        initial={initial}
+      />
     </Shell>
   );
 }
@@ -155,6 +164,23 @@ async function hydrate(
   return found;
 }
 
+/**
+ * Turn the query string back into form values.
+ *
+ * A checkbox group posts one name many times, so a multi-valued axis has to
+ * come back as an array or only its last value would be re-checked.
+ */
+function initialAnswersFrom(
+  params: URLSearchParams,
+): Readonly<Record<string, string | readonly string[]>> {
+  const initial: Record<string, string | string[]> = {};
+  for (const key of new Set(params.keys())) {
+    const all = params.getAll(key);
+    initial[key] = all.length > 1 ? all : (all[0] ?? "");
+  }
+  return initial;
+}
+
 export async function MatchScreen({
   deps,
   catalog,
@@ -162,7 +188,7 @@ export async function MatchScreen({
   clientFingerprint,
   viewerFingerprint,
 }: MatchScreenProps) {
-  if (!wasSubmitted(params)) return <Questionnaire />;
+  if (!wasSubmitted(params)) return <Questionnaire initial={initialAnswersFrom(params)} />;
 
   const answers: RawAnswerBag = answersFromParams(params);
 
@@ -175,7 +201,16 @@ export async function MatchScreen({
     // both leave the buyer on the questionnaire with an explanation, which is
     // the only place either is actionable.
     if (!isAppError(error)) throw error;
-    return <Questionnaire fieldErrors={error.fields} notice={error.message} />;
+    return (
+      <Questionnaire
+        fieldErrors={error.fields}
+        notice={error.message}
+        // The whole point of a field error is to be read next to what caused
+        // it. Returning a blank form with a complaint attached is worse than
+        // no message at all.
+        initial={initialAnswersFrom(params)}
+      />
+    );
   }
 
   const hydrated = await hydrate(catalog, outcome.matches);
@@ -205,10 +240,10 @@ export async function MatchScreen({
         message={outcome.message}
         noMatches={outcome.noMatches}
         catalogHref={outcome.escapeHatch.catalogHref}
-        // Back to a blank questionnaire. `QuestionnaireForm` takes no initial
-        // values, so it cannot be pre-filled with what was already answered;
-        // reported upstream rather than worked around with a second form here.
-        reviseHref={MATCH_PATH}
+        // Back to the questionnaire carrying the answers already given. The
+        // buyer revises exactly when the matches missed, and handing them a
+        // blank form there is a reason to give up rather than adjust.
+        reviseHref={`${MATCH_PATH}?${params.toString()}`}
         notifyForm={
           <NotifyMeForm
             action={`${NOTIFY_ACTION}?${params.toString()}`}
