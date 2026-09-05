@@ -4,17 +4,18 @@
  * ARCHITECTURE.md: routes parse input, call a module API, and render. Building
  * the dependencies a module is handed is part of "call a module API".
  *
- * `depsWithoutOrdersOrMatchmaker` is the conspicuous name on purpose: it
- * installs the zero-reporting demand source and the zero-reporting impression
- * source, which are correct only while `orders` and `matchmaker` do not exist.
- * The dashboard therefore shows zero reserved units and zero impressions today.
- * When those modules ship, this function is the one place that changes -- and
- * `assertDemandSourceIsWired` turns a forgotten swap into a loud failure on the
- * reservation path rather than a silently over-available artwork.
+ * This file used to call `depsWithoutOrdersOrMatchmaker`, whose conspicuous
+ * name existed for exactly this moment: it installs the zero-reporting demand
+ * source and the zero-reporting impression source, which were correct only
+ * while `orders` and `matchmaker` did not exist. Both have shipped, so the swap
+ * its own header promised — "this function is the one place that changes" — has
+ * been made, in `_lib/deps.ts`, once, for every surface.
+ *
+ * The consequence for this dashboard is that reserved units and match
+ * impressions are now real numbers rather than zeros. The consequence
+ * everywhere else is larger: `noDemand` reports zero reservations for
+ * everything, and with a `reservations` table present that is the failure
+ * `assertDemandSourceIsWired` exists to make loud — an artwork that reads as
+ * fully available regardless of what is held against it.
  */
-import { getDatabase } from "@/shared/db";
-import { depsWithoutOrdersOrMatchmaker, type ArtworksDeps } from "@/modules/artworks";
-
-export function artworksDeps(): ArtworksDeps {
-  return depsWithoutOrdersOrMatchmaker(getDatabase());
-}
+export { artworksDeps } from "@/app/_lib/deps";

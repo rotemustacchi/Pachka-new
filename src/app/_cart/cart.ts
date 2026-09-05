@@ -40,6 +40,15 @@ import type { CartLineInput } from "@/modules/orders";
 
 export const CART_COOKIE = "pachka_cart";
 
+/**
+ * Where a cart is looked at.
+ *
+ * Here rather than in `actions.ts` because that module is `"use server"` and may
+ * export only async functions — a lone constant there makes the module export
+ * nothing at all.
+ */
+export const CHECKOUT_PATH = "/checkout";
+
 /** A month. A wish does not go stale quickly, and nothing is held meanwhile. */
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 

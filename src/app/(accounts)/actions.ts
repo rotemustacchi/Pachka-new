@@ -16,7 +16,6 @@
  * string or a row of somebody else's data (SECURITY.md S2-26).
  */
 import { redirect } from "next/navigation";
-import { isAppError, type FieldErrors } from "@/shared/errors";
 import {
   register,
   requestPasswordReset,
@@ -25,31 +24,14 @@ import {
   upgradeToArtist,
 } from "@/modules/accounts";
 import { accountsDeps, requestIp, requireUserId } from "./deps";
-
-export interface FormState {
-  readonly status: "idle" | "ok" | "error";
-  /** Shown at the top of the form. Safe to display verbatim. */
-  readonly message?: string;
-  readonly fields?: FieldErrors;
-}
-
-export const IDLE: FormState = { status: "idle" };
-
-/** One place that decides what a caught error is allowed to say. */
-function toFormState(error: unknown): FormState {
-  if (isAppError(error)) {
-    return { status: "error", message: error.message, fields: error.fields };
-  }
-  return {
-    status: "error",
-    message: "Something went wrong. Please try again.",
-  };
-}
-
-function text(form: FormData, name: string): string {
-  const value = form.get(name);
-  return typeof value === "string" ? value : "";
-}
+// A `"use server"` module may export ONLY async functions. `FormState`, `IDLE`,
+// `toFormState` and `text` used to be declared and exported here, which made
+// this module export nothing at all and failed the production build with
+// "A \"use server\" file can only export async functions, found object" —
+// pointing at this file from whichever page imported an action from it.
+// `_lib/form-state.ts` was created for exactly this and says so in its header;
+// this file had simply never been switched over.
+import { text, toFormState, type FormState } from "@/app/_lib/form-state";
 
 export async function registerAction(_prev: FormState, form: FormData): Promise<FormState> {
   try {

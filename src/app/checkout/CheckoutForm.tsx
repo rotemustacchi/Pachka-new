@@ -31,7 +31,8 @@
  */
 import { useActionState } from "react";
 import { Button, Card, Input } from "@/shared/ui";
-import { checkoutAction, IDLE_CHECKOUT, type CheckoutState } from "./actions";
+import { checkoutAction } from "./actions";
+import { IDLE_CHECKOUT, type CheckoutState } from "./state";
 
 function Banner({ state }: { readonly state: CheckoutState }) {
   if (state.status !== "error" || state.message === undefined) return null;

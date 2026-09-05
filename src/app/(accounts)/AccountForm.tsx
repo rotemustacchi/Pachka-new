@@ -12,8 +12,7 @@
  */
 import { useActionState } from "react";
 import { Button } from "@/shared/ui";
-import type { FormState } from "./actions";
-import { IDLE } from "./actions";
+import { IDLE, type FormState } from "@/app/_lib/form-state";
 
 export interface AccountFormProps {
   readonly action: (previous: FormState, form: FormData) => Promise<FormState>;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Badge, Button, Card, SectionHeading } from "@/shared/ui";
+import { Badge, Card, SectionHeading } from "@/shared/ui";
 
 /**
  * Presentational placeholder home page (task 1.5) — renders the base layout
@@ -65,7 +65,15 @@ export default function HomePage() {
             התאמות אישיות במקום אינסוף גלילה.
           </p>
           <div className="flex flex-wrap items-center gap-4">
-            <Button variant="primary">התחילו את ההתאמה</Button>
+            {/* A link rather than a `Button`: this navigates, and a <button>
+                inside an <a> is not valid content. The classes are `Button`'s
+                primary variant so the treatment stays the approved one. */}
+            <Link
+              href="/match"
+              className="inline-flex items-center justify-center rounded-button bg-ink px-10 py-4 text-base font-bold text-paper transition-colors hover:bg-ink-soft"
+            >
+              התחילו את ההתאמה
+            </Link>
             <Link href="/catalog" className="border-b border-rule pb-1 text-base font-medium">
               או עיינו בקטלוג
             </Link>
@@ -124,9 +132,12 @@ export default function HomePage() {
             פתחו חנות בלי עלות התחלתית. העלו תמונה, והמערכת מתייגת אותה בשבילכם.
           </p>
         </div>
-        <Button variant="secondary" className="whitespace-nowrap">
+        <Link
+          href="/become-an-artist"
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-button border-[1.5px] border-ink bg-transparent px-[38px] py-[15px] text-base font-bold text-ink transition-colors hover:bg-paper-deep"
+        >
           הצטרפו כאמן
-        </Button>
+        </Link>
       </section>
     </>
   );

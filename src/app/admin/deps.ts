@@ -7,11 +7,6 @@
  *
  * What is deliberately absent:
  *
- *   • `uploads` — the module exists in the tree but publishes no `index.ts`
- *     yet, and nothing outside a module may import a deeper path
- *     (ARCHITECTURE.md). So `listQueue` falls back to `noFlaggedUploads` and
- *     the queue shows reports only. Wiring it is one line here once that file
- *     lands.
  *   • `mailer` — absent means an artist's takedown notice is recorded as
  *     undelivered rather than silently dropped, which is the module's own
  *     stated behaviour. `takeDownArtwork` returns `artistNotified: false` and
@@ -19,13 +14,25 @@
  *   • `payouts` — not shipped; suspension reports outstanding payouts as
  *     unavailable rather than as zero.
  *
- * All three are seams, not defaults dressed up as answers.
+ * Both are seams, not defaults dressed up as answers.
+ *
+ * What is no longer absent, and was:
+ *
+ *   • `uploads` — it publishes an `index.ts` now, so `listQueue` no longer
+ *     falls back to `noFlaggedUploads`. Left unwired, the queue shows open
+ *     reports only, and an upload the pipeline flagged for a human decision
+ *     waits for a human who is never shown it.
+ *   • `artworks` — its deps came from `depsWithoutOrdersOrMatchmaker` while
+ *     `orders` and `matchmaker` did not exist. Both have shipped, so they now
+ *     come from the composition root with the real demand and impression
+ *     sources wired in.
  */
 import { cookies } from "next/headers";
 import { getDatabase, createSupabaseServerClient, createSupabaseServiceRoleClient } from "@/shared/db";
 import { publicEnv } from "@/shared/config";
 import { createSupabaseAuthGateway, type AuthGateway } from "@/modules/accounts";
-import { depsWithoutOrdersOrMatchmaker } from "@/modules/artworks";
+import { flaggedUploadSource } from "@/modules/uploads";
+import { artworksDeps } from "@/app/_lib/deps";
 import type { ModerationDeps } from "@/modules/moderation";
 
 type CookieWrites = "allowed" | "forbidden";
@@ -52,10 +59,17 @@ async function moderationDeps(writes: CookieWrites): Promise<ModerationDeps> {
     db,
     auth: await authGateway(writes),
     siteUrl: publicEnv().NEXT_PUBLIC_SITE_URL,
-    // Takedown hands this on to `removeArtwork`. The demand source is the
-    // zero-reporting stand-in until `orders` ships, which takedown does not
-    // consult in any case: a takedown deliberately ignores reservations.
-    artworks: depsWithoutOrdersOrMatchmaker(db),
+    // `uploads` now publishes an `index.ts`, so the queue no longer falls back
+    // to `noFlaggedUploads`. Without this the admin queue shows open reports
+    // only, and an upload the pipeline flagged for a human decision waits for a
+    // human who is never shown it.
+    uploads: flaggedUploadSource(),
+    // Takedown hands this on to `removeArtwork`. The demand source is now the
+    // real one from `orders` — takedown does not consult it in any case, since
+    // a takedown deliberately ignores reservations, but every other artworks
+    // call reached through these deps does, and `noDemand` would report every
+    // artwork as fully available.
+    artworks: artworksDeps(db),
   };
 }
 

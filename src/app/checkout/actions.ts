@@ -44,10 +44,14 @@
  * application yet, so they are deliberately left undispatched rather than
  * pretended to be sent; the buyer is instead shown the payment instructions on
  * the order page, which is the one thing they must not miss. Reported upstream.
+ *
+ * Only async functions are exported from here. A `"use server"` module that
+ * exports a constant beside them exports nothing at all — see `./state.ts`,
+ * which is where `CheckoutState` and `IDLE_CHECKOUT` therefore live.
  */
 import { redirect } from "next/navigation";
 import { formatAgorot } from "@/shared/money";
-import { isAppError, type FieldErrors } from "@/shared/errors";
+import { isAppError } from "@/shared/errors";
 import {
   beginCheckout,
   previewCheckout,
@@ -58,26 +62,8 @@ import {
 import { requireUserId } from "@/app/(accounts)/deps";
 import { ordersDeps } from "@/app/_lib/deps";
 import { readCart, writeCart } from "@/app/_cart/cart";
+import type { CheckoutState } from "./state";
 
-/** The money a buyer is shown, already formatted. No `Agorot` crosses to the client. */
-export interface CheckoutQuote {
-  readonly subtotal: string;
-  readonly shipping: string;
-  readonly total: string;
-  /** Sent back on the confirm as the integrity check. Compared, never charged. */
-  readonly totalAgorot: number;
-  readonly zoneDisplayName: string;
-  readonly parcelCount: number;
-}
-
-export interface CheckoutState {
-  readonly status: "idle" | "error" | "quoted";
-  readonly message?: string;
-  readonly fields?: FieldErrors;
-  readonly quote?: CheckoutQuote;
-}
-
-export const IDLE_CHECKOUT: CheckoutState = { status: "idle" };
 
 function text(form: FormData, name: string): string {
   const value = form.get(name);

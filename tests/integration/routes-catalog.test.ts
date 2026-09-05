@@ -37,6 +37,7 @@ import {
   type CatalogQuery,
 } from "@/modules/catalog";
 import { returnTerms } from "@/modules/shipping";
+import { agorot } from "@/shared/money";
 import { isAppError } from "@/shared/errors";
 import { catalogDeps } from "@/app/_lib/deps";
 import { renderCardImage, renderDetailImage, storageUrl } from "@/app/_lib/images";
@@ -173,7 +174,7 @@ describe("the catalog route", () => {
         media: ["textile_clothing"],
         styles: ["minimalist"],
         moods: ["calm"],
-        maxPriceAgorot: 200_000,
+        maxPriceAgorot: agorot(200_000),
       },
       sort: "price_asc",
       page: 2,
@@ -287,7 +288,7 @@ describe("the artwork route", () => {
     await grantAdminRole(database, admin);
 
     const artwork = await publish(database, artist);
-    await removeArtwork(catalogDeps(database.db), admin, artwork, "moderation");
+    await removeArtwork(catalogDeps(database.db), admin, artwork);
 
     const removed = await findCatalogArtwork(catalogDeps(database.db), artwork).catch(
       (error: unknown) => error,

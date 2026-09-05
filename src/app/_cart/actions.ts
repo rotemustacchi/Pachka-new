@@ -22,14 +22,20 @@
  * And none of it is binding. Adding to a cart reserves nothing; the prices and
  * the availability are re-derived under the row lock in `orders.beginCheckout`,
  * where they must be.
+ *
+ * NOTHING BUT ASYNC FUNCTIONS IS EXPORTED FROM HERE
+ * -------------------------------------------------
+ * A `"use server"` module may export only async functions. Exporting a single
+ * constant alongside them does not fail loudly — it makes the module export
+ * NOTHING, and every import of an action from it becomes a build error pointing
+ * at the importer rather than at the cause. `CHECKOUT_PATH` therefore lives in
+ * `cart.ts`. `_lib/form-state.ts` records the same constraint.
  */
 import { redirect } from "next/navigation";
 import { findCatalogArtwork } from "@/modules/catalog";
 import { isAppError } from "@/shared/errors";
 import { catalogDeps } from "@/app/_lib/deps";
-import { readCart, withLine, withoutLine, writeCart } from "./cart";
-
-export const CHECKOUT_PATH = "/checkout";
+import { CHECKOUT_PATH, readCart, withLine, withoutLine, writeCart } from "./cart";
 
 function artworkPath(artworkId: string): string {
   return `/artworks/${artworkId}`;

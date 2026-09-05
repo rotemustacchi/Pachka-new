@@ -10,7 +10,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AccountForm, FormMessage } from "./AccountForm";
-import { IDLE, type FormState } from "./actions";
+import { IDLE, type FormState } from "@/app/_lib/form-state";
 
 describe("the form banner", () => {
   it("shows nothing before the form has been submitted", () => {
