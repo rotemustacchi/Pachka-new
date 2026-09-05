@@ -40,10 +40,11 @@
  * parses a form, calls it, and redirects.
  *
  * `beginCheckout` also returns `notifications` for the caller to dispatch once
- * the transaction has committed. No mailer is wired anywhere in this
- * application yet, so they are deliberately left undispatched rather than
- * pretended to be sent; the buyer is instead shown the payment instructions on
- * the order page, which is the one thing they must not miss. Reported upstream.
+ * the transaction has committed, which is what `dispatchAppNotifications` below
+ * does. It never throws: a mail outage must not fail an order that already
+ * exists and already holds inventory. The buyer is also shown the payment
+ * instructions on the order page, because that is the one thing they must not
+ * miss and an email is not a guarantee that they read it.
  *
  * Only async functions are exported from here. A `"use server"` module that
  * exports a constant beside them exports nothing at all — see `./state.ts`,

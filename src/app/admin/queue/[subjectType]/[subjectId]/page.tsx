@@ -2,11 +2,11 @@
  * /admin/queue/[subjectType]/[subjectId] — one queue item, and what an admin
  * can do about it.
  *
- * This address is not invented here: `moderation.queueItemUrl` builds
- * `/admin/queue/<subjectType>/<subjectId>` for the link in the report
- * notification email, and until now that link went nowhere. The email and the
- * page now agree because the module decided the shape and this route matches
- * it.
+ * This address is not invented here: the operator's report alert links to
+ * `/admin/queue/<subjectType>/<subjectId>`, built by `linkFor` in
+ * `shared/mail/notifications.ts` from the subject type and id the `moderation`
+ * descriptor carries. The email and the page agree because one of them decides
+ * the shape and the other matches it.
  *
  * Three separate, separately audited decisions live on this page and stay
  * separate: resolving the reports says what the admin decided about the

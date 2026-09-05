@@ -18,13 +18,14 @@
  *
  * WHY IT SUCCEEDS RATHER THAN THROWING
  * ------------------------------------
- * `matchmaker.noMailer` throws, and its header argues the case well: under
- * double opt-in a failed confirmation costs one buyer one email and leaks
- * nothing. But that reasoning is local to notify-me. Applied to `orders` it
- * means a checkout that has already reserved inventory and taken a commitment
- * fails at the notification, and applied to `moderation` it means a report the
- * spec requires to stay recorded is recorded with an error where a delivery
- * should be. Delivery is not allowed to break the operation that triggered it,
+ * `matchmaker` used to install a `noMailer` that threw, and its header argued
+ * the case well: under double opt-in a failed confirmation costs one buyer one
+ * email and leaks nothing. But that reasoning was local to notify-me. Applied
+ * to `orders` it means a checkout that has already reserved inventory and taken
+ * a commitment fails at the notification, and applied to `moderation` it means
+ * a report the spec requires to stay recorded is recorded with an error where a
+ * delivery should be. There is one adapter for all six emitting modules now, so
+ * the most cautious of them sets the rule. Delivery is not allowed to break the operation that triggered it,
  * and the cheapest way to guarantee that is for the default adapter to have no
  * failure mode at all.
  *
