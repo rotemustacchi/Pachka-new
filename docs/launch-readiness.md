@@ -45,10 +45,12 @@ refuses to be narrower than 407px:
 | 1440 | 1440 | 0 |
 
 The 32px overflow was identical on all eleven routes, and no individual element
-anywhere was wider than the viewport — which together prove a single shared
-cause in the shell rather than eleven page bugs. The visible symptom is that the
-logo is pushed off the screen edge and the whole page rubber-bands horizontally.
-Tablet and desktop are clean everywhere.
+anywhere was wider than the viewport — which together point at a single shared
+cause in the shell rather than eleven page bugs. A control experiment confirms
+it: setting `display: none` on the `<header>` alone, changing nothing else,
+drops `scrollWidth` from 407 to exactly 375 and the overflow to zero. The
+visible symptom is that the logo is pushed off the screen edge and the whole
+page rubber-bands horizontally. Tablet and desktop are clean everywhere.
 
 **B2 — a buyer has no way to exercise the 14-day cancellation right.**
 `src/modules/shipping/returns.ts`
@@ -300,9 +302,12 @@ was approved.
   launches with an empty catalog, so this is the first thing real visitors meet.
 - Tune the quality-gate thresholds against real photographs (12.6).
 - Measure actual AI cost per upload against the projection (12.7).
-- Clear the unhandled rejection in `tests/integration/artworks-publishing.test.ts`
-  ("refuses more styles than the cap"). The suite is green, but the rejection is
-  reported after the test completes and will eventually fail a run.
+- Chase the intermittent unhandled rejection in
+  `tests/integration/artworks-publishing.test.ts` ("refuses more styles than the
+  cap"). It surfaced on one full `npm run verify` and not on the next, with the
+  suite green both times — an assertion racing a promise that settles after the
+  test returns. Intermittent is the reason to fix it, not the reason to ignore
+  it: it will eventually land on a run that matters.
 
 ### After launch
 
