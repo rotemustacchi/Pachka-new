@@ -192,7 +192,15 @@ function search(
   );
 }
 
-const CALM_BUYER = { budgetMax: 800, styles: ["minimalist"], moods: ["calm"] };
+// A wall width is now required, and it is what makes this a ranking test at
+// all: with tags and a budget alone every matching artwork scores identically.
+const CALM_BUYER = {
+  budgetMax: 800,
+  styles: ["minimalist"],
+  moods: ["calm"],
+  wallWidth: 120,
+  wallHeight: 90,
+};
 
 // ---------------------------------------------------------------------------
 
@@ -284,6 +292,8 @@ describe("reproducibility within a rotation epoch", () => {
       styles: ["minimalist"],
       moods: ["calm"],
       targetSpaces: ["living_room"],
+      wallWidth: 120,
+      wallHeight: 90,
     };
 
     const tops = new Set<string>();
@@ -321,6 +331,8 @@ describe("budget is a signal, not a filter", () => {
       budgetMax: 500,
       styles: ["minimalist"],
       moods: ["calm"],
+      wallWidth: 120,
+      wallHeight: 90,
     });
 
     const match = outcome.matches.find((m) => m.artworkId === stretch);

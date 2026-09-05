@@ -5,15 +5,21 @@ The AI matchmaker is PACHKA's defining feature: a short questionnaire about styl
 ## ADDED Requirements
 
 ### Requirement: Buyer questionnaire
-The system SHALL present a questionnaire of at most seven questions covering preferred styles, colour palette, target space, mood, budget range in ILS, and available wall or surface dimensions. Every question except budget SHALL be optional, and the buyer SHALL be able to submit the questionnaire without an account.
+The system SHALL present a questionnaire of at most seven questions covering preferred styles, colour palette, target space, mood, budget range in ILS, and available wall or surface dimensions. A budget ceiling SHALL be required, and both wall or surface dimensions SHALL be required. Every other question SHALL be optional, and the buyer SHALL be able to submit the questionnaire without an account.
+
+A dimension is required because the taxonomy axes are categorical: an artwork either carries a style or it does not. Given only tags and a budget, every artwork carrying those tags scores identically, no ordering remains, and the top matches are arbitrary rows. A dimension is continuous and separates pieces the tags cannot, which is the difference between curation and filtering.
 
 #### Scenario: Anonymous buyer completes the questionnaire
 - **WHEN** an anonymous visitor answers the questionnaire and submits it
 - **THEN** the system returns ranked matches without requiring registration
 
 #### Scenario: Buyer skips optional questions
-- **WHEN** a buyer answers only budget and mood
+- **WHEN** a buyer answers budget, both wall dimensions and mood
 - **THEN** the system returns ranked matches using the answers provided, without demanding the skipped ones
+
+#### Scenario: Dimensions omitted
+- **WHEN** a buyer submits with a budget but without both a wall width and a wall height
+- **THEN** the system blocks submission and explains that the dimensions are needed in order to rank rather than merely filter
 
 #### Scenario: Budget omitted
 - **WHEN** a buyer attempts to submit without a budget range

@@ -1,5 +1,5 @@
 /**
- * The questionnaire: seven questions, one of them required.
+ * The questionnaire: seven questions, two of them required.
  *
  * art-matchmaker, "Buyer questionnaire": "at most seven questions covering
  * preferred styles, colour palette, target space, mood, budget range in ILS,
@@ -97,6 +97,15 @@ export interface Answers {
   readonly budgetMinAgorot: number | null;
   /** Required. The one answer without which there is no questionnaire. */
   readonly budgetMaxAgorot: number;
+  /**
+   * `parseAnswers` requires both: without a continuous signal there is nothing
+   * to rank on, only tags to filter by, and `sizeScore` needs an area so one
+   * dimension alone contributes nothing.
+   *
+   * Still typed nullable. `Answers` is also constructed directly in unit tests,
+   * and `sizeScore` keeps its own null branch rather than trusting a caller it
+   * cannot see — the parse boundary is where the rule is enforced, not the type.
+   */
   readonly wallHeightMm: number | null;
   readonly wallWidthMm: number | null;
 }
@@ -237,6 +246,13 @@ function parseCentimetres(field: string, value: unknown): number | null {
  * The budget check is the spec's "Budget omitted" scenario: submission is
  * blocked and the reason is that budget is required, in a field message the
  * form can render next to the field rather than as a banner.
+ *
+ * The wall-dimension check is the difference between a curator and a tag
+ * filter. Taxonomy answers are categorical: an artwork either carries the style
+ * or it does not. With nothing but tags and a budget, every artwork that
+ * carries the tags scores identically, there is no ordering left to make, and
+ * "the top three matches" is three arbitrary rows. A dimension is continuous,
+ * so it separates pieces that the tags cannot.
  */
 export function parseAnswers(raw: RawAnswers): Answers {
   const budgetMaxAgorot = parseShekels("budgetMax", raw.budgetMax, true);
@@ -256,6 +272,25 @@ export function parseAnswers(raw: RawAnswers): Answers {
     });
   }
 
+  const wallHeightMm = parseCentimetres("wallHeight", raw.wallHeight);
+  const wallWidthMm = parseCentimetres("wallWidth", raw.wallWidth);
+
+  // Both, not either. `sizeScore` needs an area to compare against, so a lone
+  // width scores nothing and leaves the buyer exactly where they started: tags
+  // and a budget, every matching artwork tied, no ranking to speak of.
+  if (wallHeightMm === null || wallWidthMm === null) {
+    throw AppError.validation(
+      "Both wall dimensions are required, so the matches can be ranked rather than merely filtered.",
+      {
+        code: "matchmaker.dimensions_required",
+        fields: {
+          ...(wallWidthMm === null ? { wallWidth: ["יש להזין את רוחב הקיר"] } : {}),
+          ...(wallHeightMm === null ? { wallHeight: ["יש להזין את גובה הקיר"] } : {}),
+        },
+      },
+    );
+  }
+
   return {
     medium: parseOptionalOne("medium", raw.medium, isMedium),
     styles: parseOptionalList("styles", raw.styles, isStyle),
@@ -264,8 +299,8 @@ export function parseAnswers(raw: RawAnswers): Answers {
     moods: parseOptionalList("moods", raw.moods, isMood),
     budgetMinAgorot,
     budgetMaxAgorot,
-    wallHeightMm: parseCentimetres("wallHeight", raw.wallHeight),
-    wallWidthMm: parseCentimetres("wallWidth", raw.wallWidth),
+    wallHeightMm,
+    wallWidthMm,
   };
 }
 

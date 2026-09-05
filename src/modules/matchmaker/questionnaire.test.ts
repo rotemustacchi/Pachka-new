@@ -28,11 +28,11 @@ describe("the shape of the questionnaire", () => {
   });
 });
 
-describe("budget is the only required answer", () => {
+describe("budget and the wall dimensions are required", () => {
   it("accepts a submission with nothing but a budget", () => {
     // "Buyer skips optional questions -> the system returns ranked matches
     // using the answers provided, without demanding the skipped ones."
-    const answers = parseAnswers({ budgetMax: 1200 });
+    const answers = parseAnswers({ wallHeight: 200, wallWidth: 150, budgetMax: 1200 });
 
     expect(answers.budgetMaxAgorot).toBe(120_000);
     expect(answers.styles).toEqual([]);
@@ -68,7 +68,7 @@ describe("budget is the only required answer", () => {
     // SECURITY.md S2-27: a price arriving as a float is how money is corrupted.
     // A budget is compared against a price, so it becomes an integer at the
     // boundary and stays one.
-    const answers = parseAnswers({ budgetMax: "1250.55" });
+    const answers = parseAnswers({ wallHeight: 200, wallWidth: 150, budgetMax: "1250.55" });
 
     expect(answers.budgetMaxAgorot).toBe(125_055);
     expect(Number.isInteger(answers.budgetMaxAgorot)).toBe(true);
@@ -79,13 +79,13 @@ describe("every answer is checked against a closed set", () => {
   it("refuses a style outside the taxonomy rather than dropping it", () => {
     // Dropping would produce a ranking the buyer did not ask for, with nothing
     // telling them so.
-    expect(() => parseAnswers({ budgetMax: 1000, styles: ["coastal-minimal"] })).toThrowError(
+    expect(() => parseAnswers({ wallHeight: 200, wallWidth: 150, budgetMax: 1000, styles: ["coastal-minimal"] })).toThrowError(
       expect.objectContaining({ code: "matchmaker.answer_outside_set" }),
     );
   });
 
   it("refuses a medium, mood, target space and palette outside their sets", () => {
-    const budget = { budgetMax: 1000 };
+    const budget = { wallHeight: 200, wallWidth: 150, budgetMax: 1000 };
 
     expect(() => parseAnswers({ ...budget, medium: "sculpture" })).toThrow();
     expect(() => parseAnswers({ ...budget, moods: ["furious"] })).toThrow();
@@ -96,6 +96,8 @@ describe("every answer is checked against a closed set", () => {
   it("refuses a stuffed multi-select rather than scoring the first few", () => {
     expect(() =>
       parseAnswers({
+        wallHeight: 200,
+        wallWidth: 150,
         budgetMax: 1000,
         styles: ["minimalist", "abstract", "pop_art", "boho_coastal", "modern_industrial", "minimalist"],
       }),
@@ -103,26 +105,35 @@ describe("every answer is checked against a closed set", () => {
   });
 
   it("collapses duplicates instead of double-counting an answer", () => {
-    const answers = parseAnswers({ budgetMax: 1000, styles: ["minimalist", "minimalist"] });
+    const answers = parseAnswers({ wallHeight: 200, wallWidth: 150, budgetMax: 1000, styles: ["minimalist", "minimalist"] });
 
     expect(answers.styles).toEqual(["minimalist"]);
   });
 
   it("accepts a single value where a list is allowed, as a form submits it", () => {
-    const answers = parseAnswers({ budgetMax: 1000, styles: "abstract" });
+    const answers = parseAnswers({ wallHeight: 200, wallWidth: 150, budgetMax: 1000, styles: "abstract" });
 
     expect(answers.styles).toEqual(["abstract"]);
   });
 });
 
 describe("dimensions", () => {
-  it("are optional, and reported as absent when only one side is given", () => {
-    // A wall with a height and no width is not a wall we can fit anything to,
-    // so the size axis is absent rather than half-computed.
-    expect(hasDimensions(parseAnswers({ budgetMax: 1000, wallHeight: 200 }))).toBe(false);
-    expect(hasDimensions(parseAnswers({ budgetMax: 1000, wallHeight: 200, wallWidth: 150 }))).toBe(
-      true,
+  it("are both required, because one side alone cannot rank anything", () => {
+    // A wall with a height and no width is not a wall we can fit anything to.
+    // `sizeScore` needs an area, so a lone dimension leaves the size axis
+    // absent — and with the size axis gone the score collapses to tags and a
+    // budget, where every matching artwork ties and there is no ranking left.
+    // That is the difference between a curator and a filter, so it is refused
+    // at the parse boundary rather than scored as a nullable axis.
+    expect(() => parseAnswers({ budgetMax: 1000, wallHeight: 200 })).toThrowError(
+      expect.objectContaining({ code: "matchmaker.dimensions_required" }),
     );
+    expect(() => parseAnswers({ budgetMax: 1000, wallWidth: 150 })).toThrowError(
+      expect.objectContaining({ code: "matchmaker.dimensions_required" }),
+    );
+    expect(
+      hasDimensions(parseAnswers({ budgetMax: 1000, wallHeight: 200, wallWidth: 150 })),
+    ).toBe(true);
   });
 
   it("are stored in whole millimetres, matching the artworks column", () => {
