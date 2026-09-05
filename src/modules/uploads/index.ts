@@ -164,7 +164,7 @@ export {
   type UploadThresholds,
 } from "./config";
 
-// ---- The external boundaries, and the production adapter for one of them.
+// ---- The external boundaries, and the production adapters for all three.
 export {
   isRetryable,
   DISPLAY_BUCKET,
@@ -177,7 +177,30 @@ export {
   type VisionAnalyst,
   type VisionRequest,
 } from "./ports";
-export { createSupabaseObjectStore } from "./supabase-object-store";
+export {
+  createSupabaseObjectStore,
+  type StorageBucketApi,
+  type StorageClient,
+  type StorageClientFactory,
+  type StorageObjectBody,
+} from "./supabase-object-store";
+export {
+  createAnthropicVisionAnalyst,
+  ANTHROPIC_API_VERSION,
+  ANTHROPIC_MESSAGES_URL,
+  VISION_IMAGE_LONG_EDGE_PX,
+  VISION_MODEL,
+  VISION_TIMEOUT_MS,
+  type AnthropicVisionOptions,
+  type HttpTransport,
+} from "./anthropic-vision";
+export {
+  createVoyageEmbedder,
+  EMBEDDING_MODEL,
+  EMBEDDING_TIMEOUT_MS,
+  VOYAGE_EMBEDDINGS_URL,
+  type VoyageEmbedderOptions,
+} from "./voyage-embedder";
 
 // ---- What other modules read out of this one.
 export type { FlaggedUpload, FlaggedUploadSource, MatchmakerExclusion } from "./contracts";
