@@ -142,10 +142,11 @@ describe("what the checkout believes from the client", () => {
       delivery: DELIVERY,
     });
 
-    // A real zone, resolved from "תל אביב" against the seeded table, with a
-    // real rate behind it. `CheckoutRequest` carries no zone and no tier.
+    // A real zone, resolved from "תל אביב" against the seeded table, with the
+    // seeded rate behind it: standard parcels ship free (OPEN-QUESTIONS #22).
+    // `CheckoutRequest` carries no zone and no tier.
     expect(preview.zoneCode).not.toBe("");
-    expect(preview.shippingAgorot).toBeGreaterThan(0);
+    expect(preview.shippingAgorot).toBe(0);
     expect(preview.totalAgorot).toBe(preview.subtotalAgorot + preview.shippingAgorot);
   });
 

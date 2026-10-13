@@ -110,7 +110,7 @@ describe("getConfig() — caching", () => {
 
   it("serves a cached value on a second read within the TTL, even if the row changed underneath it", async () => {
     const first = await getConfig(database.db, "matchmaker.result_count");
-    expect(first).toBe(5);
+    expect(first).toBe(3);
 
     await database.db.query("update app_config set value = $2::jsonb where key = $1", [
       "matchmaker.result_count",
@@ -118,7 +118,7 @@ describe("getConfig() — caching", () => {
     ]);
 
     const second = await getConfig(database.db, "matchmaker.result_count");
-    expect(second).toBe(5); // still the cached value, not the freshly written 99
+    expect(second).toBe(3); // still the cached value, not the freshly written 99
   });
 
   it("invalidateConfig() forces the next read to hit the database again", async () => {
@@ -156,7 +156,7 @@ describe("getConfig() — caching", () => {
     vi.useFakeTimers();
     try {
       const first = await getConfig(database.db, "matchmaker.result_count");
-      expect(first).toBe(5);
+      expect(first).toBe(3);
 
       await database.db.query("update app_config set value = $2::jsonb where key = $1", [
         "matchmaker.result_count",
@@ -176,7 +176,7 @@ describe("getConfig() — caching", () => {
     const otherClient = createDatabase({ connectionString: database.url, max: 2 });
     try {
       const viaFirst = await getConfig(database.db, "matchmaker.result_count");
-      expect(viaFirst).toBe(5);
+      expect(viaFirst).toBe(3);
 
       // Mutate the underlying row directly.
       await database.db.query("update app_config set value = $2::jsonb where key = $1", [
@@ -191,7 +191,7 @@ describe("getConfig() — caching", () => {
 
       // Meanwhile the first client's cache is untouched by the second client's read.
       const viaFirstAgain = await getConfig(database.db, "matchmaker.result_count");
-      expect(viaFirstAgain).toBe(5);
+      expect(viaFirstAgain).toBe(3);
     } finally {
       await otherClient.end();
     }

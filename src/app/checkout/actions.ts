@@ -142,7 +142,7 @@ export async function checkoutAction(
         status: "quoted",
         quote: {
           subtotal: formatAgorot(preview.subtotalAgorot),
-          shipping: formatAgorot(preview.shippingAgorot),
+          shipping: preview.shippingAgorot === 0 ? "חינם" : formatAgorot(preview.shippingAgorot),
           total: formatAgorot(preview.totalAgorot),
           totalAgorot: preview.totalAgorot,
           zoneDisplayName: preview.zoneDisplayName,

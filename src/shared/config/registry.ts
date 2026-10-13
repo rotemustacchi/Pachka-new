@@ -69,7 +69,7 @@ export const CONFIG_REGISTRY = {
 
   "matchmaker.result_count": key<number>(
     "integer",
-    5,
+    3,
     "Maximum matches returned for a questionnaire.",
   ),
   "matchmaker.sparse_catalog_threshold": key<number>(
@@ -168,16 +168,16 @@ export const CONFIG_REGISTRY = {
     "Business days past the stated lead time before a fulfilment is chased.",
   ),
 
-  // PLACEHOLDER default. The real PO box is seeded in the migration and is an
-  // operator setting, because it changes when the box moves and that is not a
-  // deployment. The shape is validated where it is read.
+  // The real address is seeded in the migration and is an operator setting,
+  // because it changes when the address moves and that is not a deployment.
+  // The postal code is still a PLACEHOLDER. The shape is validated where it is read.
   "shipping.pachka_return_address": key<PostalAddressValue>(
     "json",
     {
       recipient: "PACHKA",
-      line1: "PLACEHOLDER PO BOX",
-      city: "Tel Aviv-Yafo",
-      postalCode: "6100000",
+      line1: "יגאל 13",
+      city: "חדרה",
+      postalCode: "PLACEHOLDER",
       countryCode: "IL",
     },
     "The PACHKA-operated return address. Every return routes through it so that no artist address is printed on a shipping label.",

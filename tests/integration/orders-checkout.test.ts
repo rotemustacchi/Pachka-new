@@ -14,7 +14,7 @@
  * one aborts the whole transaction rather than being quietly re-priced.
  */
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { useTestDatabase, type TestDatabase } from "../harness";
 import type { Database } from "@/shared/db";
 import { createDraft, publishArtwork, type ArtworkInput } from "@/modules/artworks";
@@ -52,7 +52,7 @@ async function seedBuyer(db: Database, name = "דנה כהן"): Promise<string> 
 /**
  * 100 x 70 cm, 1850 g. With the packed-depth fallback that is a parcel of
  * 1000 x 700 x 50 mm, which fits the seeded `large` tier and nothing smaller.
- * At the seeded `center` zone that is 8900 agorot.
+ * Priced at 8900 agorot by `useTestDatabaseWithRates`.
  */
 const CANVAS: ArtworkInput = {
   title: "קו החוף, שקיעה",
@@ -84,6 +84,25 @@ const PRINT: ArtworkInput = {
 const LARGE_TIER_CENTER_AGOROT = 8900;
 const SMALL_TIER_CENTER_AGOROT = 2900;
 
+/**
+ * Standard parcels ship free (OPEN-QUESTIONS #22), so the seeded rates are all
+ * zero, and a zero proves nothing about who decides the shipping charge or how
+ * two parcels add up. Every test here prices the table itself.
+ */
+function useTestDatabaseWithRates(): TestDatabase {
+  const database = useTestDatabase();
+  beforeEach(async () => {
+    await database.db.query(
+      `update shipping_rates r
+          set amount_agorot = case t.code when 'small' then $1::bigint when 'large' then $2::bigint else 4900 end
+         from shipping_tiers t
+        where t.id = r.tier_id`,
+      [SMALL_TIER_CENTER_AGOROT, LARGE_TIER_CENTER_AGOROT],
+    );
+  });
+  return database;
+}
+
 async function publishFor(
   database: TestDatabase,
   artistId: string,
@@ -104,7 +123,7 @@ const DELIVERY = {
 };
 
 describe("the server decides the money", () => {
-  const database = useTestDatabase();
+  const database = useTestDatabaseWithRates();
 
   it("ignores a client-supplied price and charges the artwork's own", async () => {
     // SECURITY.md S0-5's first test, in the shape this module's types allow it
@@ -206,7 +225,7 @@ describe("the server decides the money", () => {
 });
 
 describe("delivery details", () => {
-  const database = useTestDatabase();
+  const database = useTestDatabaseWithRates();
 
   it("names every missing field at once and creates nothing", async () => {
     // `checkout-orders`: "the system blocks the order and identifies the missing
@@ -251,7 +270,7 @@ describe("delivery details", () => {
 });
 
 describe("an order spanning two artists", () => {
-  const database = useTestDatabase();
+  const database = useTestDatabaseWithRates();
 
   it("splits into one fulfilment per artist, each priced as its own parcel", async () => {
     // `checkout-orders`: "the system creates two fulfilment records, each
@@ -318,7 +337,7 @@ describe("an order spanning two artists", () => {
 });
 
 describe("the cart", () => {
-  const database = useTestDatabase();
+  const database = useTestDatabaseWithRates();
 
   it("marks a line unavailable once someone else has bought it, and excludes it from the total", async () => {
     // `checkout-orders`, *Artwork sells while in another buyer's cart*: the line
@@ -434,7 +453,7 @@ describe("the cart", () => {
 });
 
 describe("checkout request shape", () => {
-  const database = useTestDatabase();
+  const database = useTestDatabaseWithRates();
 
   it("refuses the same artwork twice in one order", async () => {
     const deps = ordersDeps(database);
@@ -485,7 +504,7 @@ describe("checkout request shape", () => {
 });
 
 describe("the cost breakdown before confirming", () => {
-  const database = useTestDatabase();
+  const database = useTestDatabaseWithRates();
 
   it("shows item prices, shipping and total in ILS without reserving anything", async () => {
     // `checkout-orders`, *Cost breakdown before confirmation*: "the system

@@ -75,9 +75,9 @@ export const QUESTION_LABELS: Readonly<Record<QuestionId, string>> = {
   medium: "מה מחפשים?",
   styles: "אילו סגנונות מדברים אליכם?",
   palette: "איזו פלטת צבעים מתאימה לחלל?",
-  targetSpace: "לאיזה חלל בבית?",
-  mood: "איזה וייב אתם מחפשים?",
-  budget: "מה טווח התקציב?",
+  targetSpace: "לאיזה חלל היצירה מיועדת?",
+  mood: "איזו אווירה הייתם רוצים שהאמנות תכניס לחדר?",
+  budget: "מהו התקציב המתוכנן ליצירה?",
   dimensions: "כמה מקום פנוי יש על הקיר או המשטח?",
 };
 

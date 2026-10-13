@@ -125,7 +125,7 @@ describe("the questionnaire", () => {
   it("is what a first visit gets, with the budget named as the required answer", async () => {
     const markup = await serve(database, "");
 
-    expect(markup).toContain("מה טווח התקציב?");
+    expect(markup).toContain("מהו התקציב המתוכנן ליצירה?");
     expect(markup).toContain("(חובה)");
     // The whole taxonomy is on the page, so an answer is a choice from a closed
     // set rather than free text.
@@ -137,7 +137,7 @@ describe("the questionnaire", () => {
 
     expect(markup).toContain("יש להזין תקציב");
     // Back on the form, not on an empty results page.
-    expect(markup).toContain("מה טווח התקציב?");
+    expect(markup).toContain("מהו התקציב המתוכנן ליצירה?");
   });
 
   it("requires BOTH wall dimensions, and names each missing one", async () => {
@@ -180,7 +180,7 @@ describe("the questionnaire", () => {
     // the module's form to change and is reported rather than worked around
     // with a second form here.
     expect(markup).toContain("not a permitted styles answer");
-    expect(markup).toContain("מה טווח התקציב?");
+    expect(markup).toContain("מהו התקציב המתוכנן ליצירה?");
     // Emphatically NOT treated as a valid search.
     expect(markup).not.toContain(NO_MATCHES_MESSAGE);
   });
